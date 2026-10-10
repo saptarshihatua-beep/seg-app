@@ -1,0 +1,12 @@
+# Netlify Configuration for SEG Frontend
+
+[build]
+  base = "client"
+  publish = "dist"
+  command = "npm run build"
+
+# Single-Page Application (SPA) redirect rule
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

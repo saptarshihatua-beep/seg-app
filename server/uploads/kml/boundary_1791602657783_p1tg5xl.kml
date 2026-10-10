@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>confidential_memo.txt - Access Boundary</name>
+    <description>Geolocked Area for Recipient: edward@chow-s.com at institute of engineering and management </description>
+    <Style id="segPolygonStyle">
+      <LineStyle>
+        <color>ff0000ff</color>
+        <width>3</width>
+      </LineStyle>
+      <PolyStyle>
+        <color>4d0000ff</color>
+        <fill>1</fill>
+        <outline>1</outline>
+      </PolyStyle>
+    </Style>
+    <Placemark>
+      <name>confidential_memo.txt Zone</name>
+      <description>Physical authorization boundary. Receiver must be within this perimeter to decrypt.</description>
+      <styleUrl>#segPolygonStyle</styleUrl>
+      <Polygon>
+        <extrude>1</extrude>
+        <altitudeMode>clampToGround</altitudeMode>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>
+              -104.800655,38.894032,0 -104.799655,38.894032,0 -104.799655,38.893031,0 -104.800655,38.893031,0 -104.800655,38.894032,0
+            </coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>

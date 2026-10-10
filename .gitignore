@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+*/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Production build outputs
+dist/
+*/dist/
+build/
+*/build/
+
+# Local database and uploaded runtime files
+server/db/*.sqlite*
+server/uploads/*
+!server/uploads/.gitkeep
+!server/uploads/kml/
+!server/uploads/kml/.gitkeep
+
+# Environment variables & local secrets
+.env
+.env.local
+.env.*.local
+client/.env
+server/.env
+
+# Large binary files & tools
+cloudflared.exe
+*.exe
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
