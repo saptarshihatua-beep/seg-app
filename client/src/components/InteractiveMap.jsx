@@ -55,6 +55,28 @@ const googleMapsDarkTheme = [
   { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#0284c7" }] }
 ];
 
+// Google API keys are 39 chars: "AIza" + 35 URL-safe chars. Rejects placeholders like "AIzaSy...".
+const isValidGoogleKey = (key) => typeof key === 'string' && /^AIza[0-9A-Za-z_-]{35}$/.test(key.trim());
+
+// Google Maps invokes window.gm_authFailure (not script onerror) when a key is rejected.
+if (typeof window !== 'undefined' && !window.gm_authFailure) {
+  window.gm_authFailure = () => {
+    window.__segGoogleAuthFailed = true;
+    console.error('[Google Maps] API key authentication failed. Falling back to Leaflet.');
+    window.dispatchEvent(new Event('seg-gmaps-auth-failure'));
+  };
+}
+
+const getStoredGoogleKey = () => {
+  if (typeof window === 'undefined') return '';
+  const stored = localStorage.getItem('seg_google_maps_key');
+  if (stored && !isValidGoogleKey(stored)) {
+    localStorage.removeItem('seg_google_maps_key');
+    return '';
+  }
+  return stored || '';
+};
+
 export default function InteractiveMap({
   polygonPoints = [],
   setPolygonPoints = null,
@@ -70,19 +92,18 @@ export default function InteractiveMap({
   const [initError, setInitError] = useState(null);
 
   // Map Provider Management (Leaflet vs Google Maps)
-  const envGoogleKey = typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY
+  const rawEnvKey = typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_MAPS_API_KEY
     ? import.meta.env.VITE_GOOGLE_MAPS_API_KEY.trim()
     : '';
+  const envGoogleKey = isValidGoogleKey(rawEnvKey) ? rawEnvKey : '';
 
-  const [apiKey, setApiKey] = useState(() => {
-    return (typeof window !== 'undefined' && localStorage.getItem('seg_google_maps_key')) || envGoogleKey || '';
-  });
+  const [apiKey, setApiKey] = useState(() => getStoredGoogleKey() || envGoogleKey || '');
 
   const [activeEngine, setActiveEngine] = useState(() => {
+    const initialKey = getStoredGoogleKey() || envGoogleKey;
+    if (!initialKey) return 'leaflet';
     const saved = typeof window !== 'undefined' ? localStorage.getItem('seg_map_engine') : null;
-    if (saved) return saved;
-    const initialKey = (typeof window !== 'undefined' && localStorage.getItem('seg_google_maps_key')) || envGoogleKey;
-    return initialKey ? 'google' : 'leaflet';
+    return saved === 'leaflet' ? 'leaflet' : 'google';
   });
 
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -104,10 +125,25 @@ export default function InteractiveMap({
   const gmapUserCircleRef = useRef(null);
   const gmapClickListenerRef = useRef(null);
 
+  // Fall back to Leaflet when Google rejects the key (invalid, unrestricted referrer, billing disabled)
+  useEffect(() => {
+    const handleAuthFailure = () => {
+      setInitError('Google Maps rejected the API key (check key restrictions / billing). Switched to Leaflet.');
+      setActiveEngine('leaflet');
+    };
+    window.addEventListener('seg-gmaps-auth-failure', handleAuthFailure);
+    return () => window.removeEventListener('seg-gmaps-auth-failure', handleAuthFailure);
+  }, []);
+
   // Dynamically load Google Maps script if activeEngine === 'google' and apiKey exists
   useEffect(() => {
     if (activeEngine !== 'google' || !apiKey) {
       setGoogleScriptLoaded(false);
+      return;
+    }
+
+    if (window.__segGoogleAuthFailed) {
+      setActiveEngine('leaflet');
       return;
     }
 
@@ -118,6 +154,12 @@ export default function InteractiveMap({
 
     const scriptId = 'google-maps-script-seg';
     let script = document.getElementById(scriptId);
+    const handleLoad = () => setGoogleScriptLoaded(true);
+    const handleError = () => {
+      console.warn('[Google Maps] Failed to load script. Falling back to Leaflet.');
+      setInitError('Google Maps script failed to load. Switched to Leaflet fallback.');
+      setActiveEngine('leaflet');
+    };
 
     if (!script) {
       script = document.createElement('script');
@@ -125,17 +167,16 @@ export default function InteractiveMap({
       script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=geometry`;
       script.async = true;
       script.defer = true;
-      script.onload = () => setGoogleScriptLoaded(true);
-      script.onerror = () => {
-        console.warn('[Google Maps] Failed to load script with provided API key. Falling back to Leaflet.');
-        setInitError('Google Maps API key rejected. Switched to Leaflet fallback.');
-        setActiveEngine('leaflet');
-      };
       document.head.appendChild(script);
-    } else {
-      script.onload = () => setGoogleScriptLoaded(true);
-      if (window.google && window.google.maps) setGoogleScriptLoaded(true);
     }
+    script.addEventListener('load', handleLoad);
+    script.addEventListener('error', handleError);
+    if (window.google && window.google.maps) setGoogleScriptLoaded(true);
+
+    return () => {
+      script.removeEventListener('load', handleLoad);
+      script.removeEventListener('error', handleError);
+    };
   }, [activeEngine, apiKey]);
 
   // Clean up all maps before switching engines
@@ -486,6 +527,11 @@ export default function InteractiveMap({
   // Handle saving API key
   const handleSaveApiKey = () => {
     const trimmed = keyInput.trim();
+    if (trimmed && !isValidGoogleKey(trimmed)) {
+      setInitError('Invalid Google Maps API key format (expected 39 characters starting with "AIza").');
+      return;
+    }
+    const keyChanged = trimmed !== apiKey;
     setApiKey(trimmed);
     if (typeof window !== 'undefined') {
       if (trimmed) {
@@ -496,6 +542,11 @@ export default function InteractiveMap({
         localStorage.removeItem('seg_google_maps_key');
         localStorage.setItem('seg_map_engine', 'leaflet');
         setActiveEngine('leaflet');
+      }
+      // The Maps SDK is bound to the key it was loaded with; a reload is required to apply a new key.
+      if (keyChanged && trimmed && document.getElementById('google-maps-script-seg')) {
+        window.location.reload();
+        return;
       }
     }
     setShowConfigModal(false);
@@ -607,6 +658,9 @@ export default function InteractiveMap({
               <span className="text-[10px] text-slate-500 block">
                 Leave empty to use Leaflet / OpenStreetMap (100% free with zero billing).
               </span>
+              {initError && (
+                <span className="text-[10px] text-red-400 block font-mono">{initError}</span>
+              )}
             </div>
 
             <div className="flex gap-2 pt-2">
