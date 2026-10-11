@@ -19,6 +19,11 @@ try {
 
 const app = express();
 
+// Vercel sits behind a proxy; needed so rate limiting uses the real client IP
+if (env.IS_VERCEL) {
+  app.set('trust proxy', 1);
+}
+
 // Security Middlewares
 app.use(helmet({
   crossOriginResourcePolicy: false // Allow loading KML and assets across ports
@@ -31,14 +36,49 @@ app.use(cors({
 app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
+// Healthcheck & Diagnostics Endpoint (no DB required, never exposes secret values)
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'ok';
+  if (env.MISSING_PRODUCTION_CONFIG.length === 0) {
+    try {
+      await initDb();
+    } catch (err) {
+      dbStatus = 'error: ' + err.message;
+    }
+  } else {
+    dbStatus = 'not configured';
+  }
+
+  res.json({
+    status: env.MISSING_PRODUCTION_CONFIG.length === 0 && dbStatus === 'ok' ? 'online' : 'misconfigured',
+    system: 'Secure Enhanced Geolocking (SEG) API v2.0',
+    dbDriver: getDriver(),
+    dbStatus,
+    missingConfig: env.MISSING_PRODUCTION_CONFIG,
+    timestamp: new Date().toISOString(),
+    nodeEnv: env.NODE_ENV,
+    isVercel: env.IS_VERCEL
+  });
+});
+
+// Block API usage until required production settings exist
+app.use('/api/', (req, res, next) => {
+  if (env.MISSING_PRODUCTION_CONFIG.length > 0) {
+    return res.status(503).json({
+      error: `Server is not configured. Missing environment variables in Vercel: ${env.MISSING_PRODUCTION_CONFIG.join(', ')}.`
+    });
+  }
+  next();
+});
+
 // Ensure DB is ready before request processing (essential for serverless environments)
 app.use(async (req, res, next) => {
   try {
     await initDb();
     next();
   } catch (err) {
-    console.error('[DB Request Middleware Error]:', err);
-    res.status(500).json({ error: 'Database service unavailable: ' + err.message });
+    console.error('[DB Request Middleware Error]:', err.message);
+    res.status(503).json({ error: 'Database service unavailable: ' + err.message });
   }
 });
 
@@ -47,22 +87,6 @@ app.use('/api/', generalLimiter);
 
 // Static routes
 app.use('/uploads/kml', express.static(kmlDir));
-
-// Healthcheck & Diagnostics Endpoint
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'online',
-    system: 'Secure Enhanced Geolocking (SEG) API v2.0',
-    dbDriver: getDriver(),
-    timestamp: new Date().toISOString(),
-    nodeEnv: env.NODE_ENV,
-    isVercel: env.IS_VERCEL,
-    storage: {
-      uploadDir: env.UPLOAD_DIR,
-      kmlDir: env.KML_DIR
-    }
-  });
-});
 
 // Mount Routes
 app.use('/api/auth', require('./routes/authRoutes'));

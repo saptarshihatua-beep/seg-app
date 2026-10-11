@@ -91,14 +91,21 @@ async function initDb() {
       }
     }
 
-    // 3. SQLite Fallback (Works zero-config everywhere)
+    // 3. SQLite Fallback (local development only)
+    if (env.IS_VERCEL) {
+      throw new Error(
+        'No persistent database configured. Set DATABASE_URL (Supabase/Neon PostgreSQL) in Vercel Project Settings > Environment Variables. ' +
+        'SQLite in serverless /tmp is not shared between instances, so delivered documents would be lost.'
+      );
+    }
+
     let sqlite3;
     try {
       sqlite3 = require('sqlite3').verbose();
     } catch (err) {
       console.error('[DB SQLite Module Error]:', err.message);
       throw new Error(
-        'SQLite native driver is not available in this environment. Please configure a DATABASE_URL (Supabase/Neon PostgreSQL) or MYSQL_URL environment variable in your Vercel settings.'
+        'SQLite driver not installed. Run "npm --prefix server install", or configure DATABASE_URL for PostgreSQL.'
       );
     }
 
@@ -113,7 +120,10 @@ async function initDb() {
 
     await initSQLiteTables();
     await seedInitialData();
-  })();
+  })().catch((err) => {
+    initPromise = null; // allow retry on next request
+    throw err;
+  });
 
   return initPromise;
 }

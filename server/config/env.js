@@ -13,11 +13,24 @@ const defaultKmlDir = isVercel
   ? path.join(os.tmpdir(), 'seg_uploads', 'kml') 
   : path.resolve(__dirname, '..', process.env.KML_DIR || 'uploads/kml');
 
+const DEV_JWT_SECRET = 'seg_super_secret_jwt_key_9837428492019482';
+
+// Required settings when running on Vercel (serverless). Local dev keeps zero-config defaults.
+const missingProductionConfig = [];
+if (isVercel) {
+  if (!process.env.JWT_SECRET) missingProductionConfig.push('JWT_SECRET');
+  if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL && !process.env.MYSQL_URL && process.env.DB_TYPE !== 'mysql') {
+    missingProductionConfig.push('DATABASE_URL (PostgreSQL, e.g. Supabase or Neon)');
+  }
+}
+
 module.exports = {
   PORT: process.env.PORT || 5000,
   NODE_ENV: process.env.NODE_ENV || 'development',
-  JWT_SECRET: process.env.JWT_SECRET || 'seg_super_secret_jwt_key_9837428492019482',
+  // The dev fallback is public (it is in the repo), so it is never used on Vercel.
+  JWT_SECRET: process.env.JWT_SECRET || (isVercel ? null : DEV_JWT_SECRET),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '24h',
+  MISSING_PRODUCTION_CONFIG: missingProductionConfig,
   
   // Database Configuration
   // Detects PostgreSQL (Supabase / Neon), MySQL, or SQLite
