@@ -92,7 +92,16 @@ async function initDb() {
     }
 
     // 3. SQLite Fallback (Works zero-config everywhere)
-    const sqlite3 = require('sqlite3').verbose();
+    let sqlite3;
+    try {
+      sqlite3 = require('sqlite3').verbose();
+    } catch (err) {
+      console.error('[DB SQLite Module Error]:', err.message);
+      throw new Error(
+        'SQLite native driver is not available in this environment. Please configure a DATABASE_URL (Supabase/Neon PostgreSQL) or MYSQL_URL environment variable in your Vercel settings.'
+      );
+    }
+
     await new Promise((resolve, reject) => {
       sqliteDb = new sqlite3.Database(SQLITE_FILE, (err) => {
         if (err) return reject(err);
