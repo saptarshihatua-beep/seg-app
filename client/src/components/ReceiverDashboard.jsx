@@ -9,15 +9,18 @@ import InteractiveMap from './InteractiveMap';
 export default function ReceiverDashboard({ onOpenVerification }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [selectedMapDoc, setSelectedMapDoc] = useState(null);
 
   const fetchReceiverDocs = async () => {
     try {
       setLoading(true);
+      setError('');
       const res = await api.getReceiverDocuments();
       setDocuments(res.documents || []);
     } catch (err) {
       console.error('Failed to load receiver documents:', err);
+      setError(err.message || 'Failed to load receiver documents.');
     } finally {
       setLoading(false);
     }
@@ -63,11 +66,23 @@ export default function ReceiverDashboard({ onOpenVerification }) {
           </button>
         </div>
 
+        {error && (
+          <div className="m-5 p-4 bg-red-950/40 border border-red-500 rounded-xl text-red-200 text-xs font-mono flex items-center justify-between">
+            <div>⚠️ {error}</div>
+            <button
+              onClick={fetchReceiverDocs}
+              className="px-3 py-1 bg-red-900/60 hover:bg-red-800 text-white rounded-lg text-xs"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div className="p-12 text-center text-slate-400 font-mono text-sm">
             Retrieving assigned confidential documents...
           </div>
-        ) : documents.length === 0 ? (
+        ) : error ? null : documents.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <FileText className="w-12 h-12 text-slate-600 mx-auto" />
             <h3 className="text-base font-semibold text-white">No Shared Documents</h3>

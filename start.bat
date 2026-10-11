@@ -1,13 +1,14 @@
 @echo off
+cd /d "%~dp0"
 echo ========================================================
 echo   STARTING SECURE ENHANCED GEOLOCKING (SEG 2.0)
 echo ========================================================
 
 echo [1/3] Starting Backend API Server on http://localhost:5000 ...
-start "SEG Backend Server" cmd /k "npm --prefix server start"
+start "SEG Backend Server" cmd /k "cd /d "%~dp0" && npm --prefix server start"
 
 echo [2/3] Starting Frontend Client on http://localhost:5173 ...
-start "SEG Frontend Client" cmd /k "npm --prefix client run dev"
+start "SEG Frontend Client" cmd /k "cd /d "%~dp0" && npm --prefix client run dev"
 
 timeout /t 3 /nobreak >nul
 

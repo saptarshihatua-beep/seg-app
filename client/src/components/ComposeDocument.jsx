@@ -24,7 +24,7 @@ const UCCS_PRESET = {
 };
 
 export default function ComposeDocument({ onDocumentCreated }) {
-  const [receiverEmail, setReceiverEmail] = useState('edward@chow-s.com');
+  const [receiverEmail, setReceiverEmail] = useState('bob.receiver@uccs.edu');
   const [encryptionKey, setEncryptionKey] = useState('myvoice');
   const [showKey, setShowKey] = useState(false);
   const [locationAddress, setLocationAddress] = useState(UCCS_PRESET.address);
@@ -63,7 +63,7 @@ export default function ComposeDocument({ onDocumentCreated }) {
 
   // Quick preset loader
   const loadUccsPreset = () => {
-    setReceiverEmail('edward@chow-s.com');
+    setReceiverEmail('bob.receiver@uccs.edu');
     setEncryptionKey('myvoice');
     setLocationAddress(UCCS_PRESET.address);
     setPolygonPoints(UCCS_PRESET.coords);

@@ -4,13 +4,22 @@ const fs = require('fs');
 const crypto = require('crypto');
 const env = require('../config/env');
 
-const uploadDir = path.resolve(__dirname, '..', env.UPLOAD_DIR);
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+const uploadDir = env.UPLOAD_DIR;
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (e) {
+  console.warn('[Upload middleware directory warning]:', e.message);
 }
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
+    if (!fs.existsSync(uploadDir)) {
+      try {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      } catch (e) {}
+    }
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {

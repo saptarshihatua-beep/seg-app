@@ -6,9 +6,13 @@ const { parsePolygonCoordinates } = require('../utils/geoPolygon');
 const { generateKML } = require('../utils/kmlGenerator');
 const { generateSecureToken, hashToken, encryptAES } = require('../utils/cryptoUtils');
 
-const kmlDir = path.resolve(__dirname, '..', env.KML_DIR);
-if (!fs.existsSync(kmlDir)) {
-  fs.mkdirSync(kmlDir, { recursive: true });
+const kmlDir = env.KML_DIR;
+const uploadDir = env.UPLOAD_DIR;
+try {
+  if (!fs.existsSync(kmlDir)) fs.mkdirSync(kmlDir, { recursive: true });
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+} catch (e) {
+  console.warn('[Directory warning]:', e.message);
 }
 
 /**
@@ -22,7 +26,7 @@ async function createDocument(req, res) {
       locationAddress,
       polygonCoordinates,
       encryptionKey,
-      clientEncryptedPayload, // Optional: if encrypted on client
+      clientEncryptedPayload, // Optional: if pre-encrypted on client
       authorizedWifiBssid,
       authorizedBleUuid,
       keyDeliveryMode // 'out_of_band' or 'escrow_geolocked'
@@ -31,6 +35,8 @@ async function createDocument(req, res) {
     if (!receiverEmail || !locationAddress || !polygonCoordinates) {
       return res.status(400).json({ error: 'Receiver email, location address, and polygon coordinates are required.' });
     }
+
+    const normalizedReceiverEmail = receiverEmail.trim().toLowerCase();
 
     const parsedCoords = parsePolygonCoordinates(polygonCoordinates);
     if (!parsedCoords || parsedCoords.length < 3) {
@@ -44,12 +50,13 @@ async function createDocument(req, res) {
     let fileSize = 0;
     let mimeType = 'text/plain';
     let encryptionMeta = {};
+    let encryptedPayloadStr = '';
 
     // 1. If file uploaded via Multer
     if (req.file) {
       originalName = req.file.originalname;
       fileSize = req.file.size;
-      mimeType = req.file.mimetype;
+      mimeType = req.file.mimetype || 'application/octet-stream';
       fileRef = req.file.filename;
 
       if (!encryptionKey && !clientEncryptedPayload) {
@@ -61,39 +68,54 @@ async function createDocument(req, res) {
         encryptionMeta = typeof clientEncryptedPayload === 'string'
           ? JSON.parse(clientEncryptedPayload)
           : clientEncryptedPayload;
-        // Overwrite file on disk with encrypted payload
-        fs.writeFileSync(req.file.path, JSON.stringify(encryptionMeta), 'utf8');
+        encryptedPayloadStr = typeof clientEncryptedPayload === 'string'
+          ? clientEncryptedPayload
+          : JSON.stringify(clientEncryptedPayload);
+
+        try {
+          fs.writeFileSync(req.file.path, encryptedPayloadStr, 'utf8');
+        } catch (e) {}
       } else {
         // Server AES encrypts the uploaded file buffer
         const rawContent = fs.readFileSync(req.file.path).toString('base64');
-        const encryptedStr = encryptAES(rawContent, encryptionKey);
-        encryptionMeta = JSON.parse(encryptedStr);
-        // Overwrite file on disk with encrypted payload
-        fs.writeFileSync(req.file.path, encryptedStr, 'utf8');
+        encryptedPayloadStr = encryptAES(rawContent, encryptionKey);
+        encryptionMeta = JSON.parse(encryptedPayloadStr);
+
+        try {
+          fs.writeFileSync(req.file.path, encryptedPayloadStr, 'utf8');
+        } catch (e) {}
       }
     } else if (clientEncryptedPayload) {
       // Text or payload submitted directly without multipart file
-      originalName = req.body.originalFilename || 'geolocked_message.txt';
-      fileSize = clientEncryptedPayload.length;
-      mimeType = 'application/json';
+      originalName = req.body.originalFilename || 'confidential_memo.txt';
+      encryptedPayloadStr = typeof clientEncryptedPayload === 'string'
+        ? clientEncryptedPayload
+        : JSON.stringify(clientEncryptedPayload);
+      fileSize = Buffer.byteLength(encryptedPayloadStr, 'utf8');
+      mimeType = 'text/plain';
       encryptionMeta = typeof clientEncryptedPayload === 'string'
         ? JSON.parse(clientEncryptedPayload)
         : clientEncryptedPayload;
 
       const randomFilename = `doc_${Date.now()}_payload.enc`;
-      const filePath = path.join(__dirname, '..', env.UPLOAD_DIR, randomFilename);
-      fs.writeFileSync(filePath, JSON.stringify(encryptionMeta), 'utf8');
       fileRef = randomFilename;
+      try {
+        const filePath = path.join(uploadDir, randomFilename);
+        fs.writeFileSync(filePath, encryptedPayloadStr, 'utf8');
+      } catch (e) {}
     } else if (req.body.plainTextContent && encryptionKey) {
-      // Plain text submitted for AES encryption
-      originalName = 'secret_note.txt';
-      const encryptedStr = encryptAES(req.body.plainTextContent, encryptionKey);
-      encryptionMeta = JSON.parse(encryptedStr);
+      // Plain text submitted for server-side AES encryption
+      originalName = req.body.originalFilename || 'secret_note.txt';
+      encryptedPayloadStr = encryptAES(req.body.plainTextContent, encryptionKey);
+      encryptionMeta = JSON.parse(encryptedPayloadStr);
       fileSize = Buffer.byteLength(req.body.plainTextContent, 'utf8');
+      mimeType = 'text/plain';
       const randomFilename = `doc_${Date.now()}_note.enc`;
-      const filePath = path.join(__dirname, '..', env.UPLOAD_DIR, randomFilename);
-      fs.writeFileSync(filePath, encryptedStr, 'utf8');
       fileRef = randomFilename;
+      try {
+        const filePath = path.join(uploadDir, randomFilename);
+        fs.writeFileSync(filePath, encryptedPayloadStr, 'utf8');
+      } catch (e) {}
     } else {
       return res.status(400).json({ error: 'Please provide a file to encrypt or text content.' });
     }
@@ -111,32 +133,35 @@ async function createDocument(req, res) {
       documentName: originalName,
       address: locationAddress,
       coordinates: parsedCoords,
-      description: `Geolocked Area for Recipient: ${receiverEmail}`
+      description: `Geolocked Area for Recipient: ${normalizedReceiverEmail}`
     });
     const kmlFilename = `boundary_${Date.now()}_${Math.random().toString(36).substring(7)}.kml`;
-    const kmlPath = path.join(kmlDir, kmlFilename);
-    fs.writeFileSync(kmlPath, kmlContent, 'utf8');
+    try {
+      const kmlPath = path.join(kmlDir, kmlFilename);
+      fs.writeFileSync(kmlPath, kmlContent, 'utf8');
+    } catch (e) {}
 
     // 3. Find recipient user if already registered
-    const receiverUser = await db.get("SELECT id FROM users WHERE email = ?", [receiverEmail.trim().toLowerCase()]);
+    const receiverUser = await db.get("SELECT id FROM users WHERE LOWER(email) = ?", [normalizedReceiverEmail]);
     const receiverId = receiverUser ? receiverUser.id : null;
 
-    // 4. Save to Database
+    // 4. Save to Database (including encrypted_payload directly in table for persistent zero-loss storage)
     const docResult = await db.run(
       `INSERT INTO documents (
         sender_id, receiver_id, receiver_email, original_filename, file_size,
-        mime_type, encrypted_file_reference, encryption_metadata,
+        mime_type, encrypted_file_reference, encryption_metadata, encrypted_payload,
         location_address, polygon_coordinates, kml_reference, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         senderId,
         receiverId,
-        receiverEmail.trim().toLowerCase(),
+        normalizedReceiverEmail,
         originalName,
         fileSize,
         mimeType,
         fileRef,
         JSON.stringify(encryptionMeta),
+        encryptedPayloadStr,
         locationAddress,
         JSON.stringify(parsedCoords),
         kmlFilename,
@@ -163,7 +188,7 @@ async function createDocument(req, res) {
         senderId,
         'DOCUMENT_CREATED',
         docId,
-        `Document "${originalName}" geolocked to ${locationAddress} with ${parsedCoords.length} boundary points.`,
+        `Document "${originalName}" geolocked to ${locationAddress} with ${parsedCoords.length} boundary points for ${normalizedReceiverEmail}.`,
         req.ip || req.connection?.remoteAddress
       ]
     );
@@ -209,7 +234,6 @@ async function getSenderDocuments(req, res) {
       [senderId]
     );
 
-    // Parse coordinates and metadata safely
     const formatted = docs.map(d => ({
       ...d,
       polygon_coordinates: parsePolygonCoordinates(d.polygon_coordinates),
@@ -218,6 +242,7 @@ async function getSenderDocuments(req, res) {
 
     res.json({ documents: formatted });
   } catch (err) {
+    console.error('[Get Sender Documents Error]:', err);
     res.status(500).json({ error: 'Failed to retrieve sender documents.' });
   }
 }
@@ -227,18 +252,29 @@ async function getSenderDocuments(req, res) {
  */
 async function getReceiverDocuments(req, res) {
   try {
-    const userEmail = req.user.email.toLowerCase();
+    const userEmail = req.user.email.trim().toLowerCase();
+    const userId = req.user.id;
+
+    // Automatically link any documents addressed to this email that don't have receiver_id yet
+    try {
+      await db.run(
+        "UPDATE documents SET receiver_id = ? WHERE receiver_id IS NULL AND LOWER(receiver_email) = ?",
+        [userId, userEmail]
+      );
+    } catch (e) {}
+
     const docs = await db.query(
       `SELECT d.id, d.original_filename, d.file_size, d.mime_type, d.location_address,
               d.polygon_coordinates, d.kml_reference, d.status, d.created_at,
-              u.name as sender_name, u.email as sender_email,
+              COALESCE(u.name, 'Sender') as sender_name,
+              COALESCE(u.email, '') as sender_email,
               (SELECT lv.verification_result FROM location_verifications lv 
                WHERE lv.document_id = d.id ORDER BY lv.id DESC LIMIT 1) as last_verification_result
        FROM documents d
-       JOIN users u ON d.sender_id = u.id
+       LEFT JOIN users u ON d.sender_id = u.id
        WHERE LOWER(d.receiver_email) = ? OR d.receiver_id = ?
        ORDER BY d.created_at DESC`,
-      [userEmail, req.user.id]
+      [userEmail, userId]
     );
 
     const formatted = docs.map(d => ({
@@ -248,6 +284,7 @@ async function getReceiverDocuments(req, res) {
 
     res.json({ documents: formatted });
   } catch (err) {
+    console.error('[Get Receiver Documents Error]:', err);
     res.status(500).json({ error: 'Failed to retrieve receiver documents.' });
   }
 }
@@ -259,9 +296,9 @@ async function getDocumentDetails(req, res) {
   try {
     const docId = req.params.id;
     const doc = await db.get(
-      `SELECT d.*, u.name as sender_name, u.email as sender_email
+      `SELECT d.*, COALESCE(u.name, 'Sender') as sender_name, COALESCE(u.email, '') as sender_email
        FROM documents d
-       JOIN users u ON d.sender_id = u.id
+       LEFT JOIN users u ON d.sender_id = u.id
        WHERE d.id = ?`,
       [docId]
     );
@@ -270,9 +307,12 @@ async function getDocumentDetails(req, res) {
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    // Access check: must be sender, receiver, or access token bearer
+    // Access check: sender, recipient, or admin
     const isSender = req.user && req.user.id === doc.sender_id;
-    const isReceiver = req.user && (req.user.id === doc.receiver_id || req.user.email.toLowerCase() === doc.receiver_email.toLowerCase());
+    const isReceiver = req.user && (
+      req.user.id === doc.receiver_id ||
+      (req.user.email && req.user.email.toLowerCase() === doc.receiver_email.toLowerCase())
+    );
 
     if (req.user && !isSender && !isReceiver && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Unauthorized to view this document.' });
@@ -300,27 +340,41 @@ async function getDocumentDetails(req, res) {
       }
     });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to get document details.' });
+    res.status(500).json({ error: 'Failed to get document details: ' + err.message });
   }
 }
 
 /**
- * Download KML file for Google Earth visualization
+ * Download KML file for Google Earth visualization (with on-the-fly fallback)
  */
 async function downloadKML(req, res) {
   try {
     const filename = path.basename(req.params.filename);
     const filePath = path.join(kmlDir, filename);
 
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: 'KML boundary file not found.' });
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'application/vnd.google-earth.kml+xml');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return fs.createReadStream(filePath).pipe(res);
     }
 
-    res.setHeader('Content-Type', 'application/vnd.google-earth.kml+xml');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    fs.createReadStream(filePath).pipe(res);
+    // On-the-fly regeneration from database coordinates
+    const doc = await db.get("SELECT * FROM documents WHERE kml_reference = ?", [filename]);
+    if (doc) {
+      const kmlContent = generateKML({
+        documentName: doc.original_filename,
+        address: doc.location_address,
+        coordinates: parsePolygonCoordinates(doc.polygon_coordinates),
+        description: `Geolocked Area for Recipient: ${doc.receiver_email}`
+      });
+      res.setHeader('Content-Type', 'application/vnd.google-earth.kml+xml');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.send(kmlContent);
+    }
+
+    res.status(404).json({ error: 'KML boundary file not found.' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to download KML file.' });
+    res.status(500).json({ error: 'Failed to download KML file: ' + err.message });
   }
 }
 

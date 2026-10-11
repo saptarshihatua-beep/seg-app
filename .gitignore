@@ -15,7 +15,7 @@ build/
 server/db/*.sqlite*
 server/uploads/*
 !server/uploads/.gitkeep
-!server/uploads/kml/
+server/uploads/kml/*
 !server/uploads/kml/.gitkeep
 
 # Environment variables & local secrets

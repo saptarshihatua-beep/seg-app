@@ -1,72 +1,183 @@
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const bcrypt = require('bcryptjs');
 const env = require('../config/env');
 
-let dbDriver = null; // 'mysql' or 'sqlite'
+let dbDriver = null; // 'postgres', 'mysql', or 'sqlite'
+let pgPool = null;
 let mysqlPool = null;
 let sqliteDb = null;
+let initPromise = null;
 
-const SQLITE_FILE = path.join(__dirname, 'seg_local.sqlite');
+const SQLITE_FILE = env.IS_VERCEL
+  ? path.join(os.tmpdir(), 'seg_local.sqlite')
+  : path.join(__dirname, 'seg_local.sqlite');
 
 /**
- * Initialize unified database
+ * Initialize unified database with automatic driver selection
+ * Supports PostgreSQL (Supabase / Neon), MySQL, and SQLite.
  */
 async function initDb() {
-  if (env.DB_TYPE === 'mysql' || env.DB_TYPE === 'auto') {
-    try {
-      const mysql = require('mysql2/promise');
-      const tempConn = await mysql.createConnection({
-        host: env.DB_HOST,
-        port: env.DB_PORT,
-        user: env.DB_USER,
-        password: env.DB_PASSWORD,
-        connectTimeout: 2000
-      });
-      await tempConn.query(`CREATE DATABASE IF NOT EXISTS \`${env.DB_NAME}\``);
-      await tempConn.end();
+  if (initPromise) return initPromise;
 
-      mysqlPool = mysql.createPool({
-        host: env.DB_HOST,
-        port: env.DB_PORT,
-        user: env.DB_USER,
-        password: env.DB_PASSWORD,
-        database: env.DB_NAME,
-        waitForConnections: true,
-        connectionLimit: 10,
-        queueLimit: 0
-      });
+  initPromise = (async () => {
+    // 1. PostgreSQL (Supabase / Neon / Vercel Postgres)
+    if (env.DB_TYPE === 'postgres' || env.DATABASE_URL) {
+      try {
+        const { Pool } = require('pg');
+        const connString = env.DATABASE_URL;
+        pgPool = new Pool({
+          connectionString: connString,
+          ssl: connString && connString.includes('localhost') ? false : { rejectUnauthorized: false },
+          connectionTimeoutMillis: 5000
+        });
 
-      // Test connection
-      const conn = await mysqlPool.getConnection();
-      conn.release();
-      dbDriver = 'mysql';
-      console.log(`[DB] Connected successfully to MySQL (${env.DB_NAME} at ${env.DB_HOST})`);
-      await initMySQLTables();
-      await seedInitialData();
-      return;
-    } catch (err) {
-      if (env.DB_TYPE === 'mysql') {
-        console.error('[DB] Failed to connect to MySQL:', err.message);
-        throw err;
+        // Test connection
+        const client = await pgPool.connect();
+        client.release();
+        dbDriver = 'postgres';
+        console.log('[DB] Connected successfully to PostgreSQL / Supabase');
+        await initPostgresTables();
+        await seedInitialData();
+        return;
+      } catch (err) {
+        if (env.DB_TYPE === 'postgres') {
+          console.error('[DB] Failed to connect to PostgreSQL:', err.message);
+          throw err;
+        }
+        console.warn(`[DB] PostgreSQL not reachable (${err.message}). Trying next engine...`);
       }
-      console.log(`[DB] MySQL not available (${err.message}). Falling back to local SQLite engine.`);
+    }
+
+    // 2. MySQL (PlanetScale / Cleardb / Local MySQL)
+    if (env.DB_TYPE === 'mysql' || env.MYSQL_URL) {
+      try {
+        const mysql = require('mysql2/promise');
+        const tempConn = await mysql.createConnection({
+          host: env.DB_HOST,
+          port: env.DB_PORT,
+          user: env.DB_USER,
+          password: env.DB_PASSWORD,
+          connectTimeout: 2000
+        });
+        await tempConn.query(`CREATE DATABASE IF NOT EXISTS \`${env.DB_NAME}\``);
+        await tempConn.end();
+
+        mysqlPool = mysql.createPool({
+          host: env.DB_HOST,
+          port: env.DB_PORT,
+          user: env.DB_USER,
+          password: env.DB_PASSWORD,
+          database: env.DB_NAME,
+          waitForConnections: true,
+          connectionLimit: 10,
+          queueLimit: 0
+        });
+
+        const conn = await mysqlPool.getConnection();
+        conn.release();
+        dbDriver = 'mysql';
+        console.log(`[DB] Connected successfully to MySQL (${env.DB_NAME} at ${env.DB_HOST})`);
+        await initMySQLTables();
+        await seedInitialData();
+        return;
+      } catch (err) {
+        if (env.DB_TYPE === 'mysql') {
+          console.error('[DB] Failed to connect to MySQL:', err.message);
+          throw err;
+        }
+        console.log(`[DB] MySQL not available (${err.message}). Falling back to SQLite engine.`);
+      }
+    }
+
+    // 3. SQLite Fallback (Works zero-config everywhere)
+    const sqlite3 = require('sqlite3').verbose();
+    await new Promise((resolve, reject) => {
+      sqliteDb = new sqlite3.Database(SQLITE_FILE, (err) => {
+        if (err) return reject(err);
+        dbDriver = 'sqlite';
+        console.log(`[DB] Connected successfully to SQLite database at: ${SQLITE_FILE}`);
+        resolve();
+      });
+    });
+
+    await initSQLiteTables();
+    await seedInitialData();
+  })();
+
+  return initPromise;
+}
+
+/**
+ * Initialize PostgreSQL tables
+ */
+async function initPostgresTables() {
+  const tableStatements = [
+    `CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      email VARCHAR(191) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      role VARCHAR(50) NOT NULL DEFAULT 'receiver',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS documents (
+      id SERIAL PRIMARY KEY,
+      sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      receiver_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      receiver_email VARCHAR(191) NOT NULL,
+      original_filename VARCHAR(255) NOT NULL,
+      file_size INTEGER NOT NULL DEFAULT 0,
+      mime_type VARCHAR(100) NOT NULL DEFAULT 'application/octet-stream',
+      encrypted_file_reference VARCHAR(255) NOT NULL,
+      encryption_metadata TEXT NOT NULL,
+      encrypted_payload TEXT NULL,
+      location_address VARCHAR(255) NOT NULL,
+      polygon_coordinates TEXT NOT NULL,
+      kml_reference VARCHAR(255) NULL,
+      status VARCHAR(50) NOT NULL DEFAULT 'active',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS access_tokens (
+      id SERIAL PRIMARY KEY,
+      document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      token_hash VARCHAR(64) NOT NULL UNIQUE,
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      used_at TIMESTAMP WITH TIME ZONE NULL DEFAULT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS location_verifications (
+      id SERIAL PRIMARY KEY,
+      document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+      receiver_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      verification_method VARCHAR(50) NOT NULL,
+      verification_result VARCHAR(50) NOT NULL,
+      verified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS audit_logs (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      action VARCHAR(100) NOT NULL,
+      document_id INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+      details TEXT NULL,
+      ip_address VARCHAR(45) NULL,
+      timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )`
+  ];
+
+  for (const sql of tableStatements) {
+    try {
+      await pgPool.query(sql);
+    } catch (e) {
+      console.warn('[DB Postgres Table Warning]:', e.message);
     }
   }
 
-  // SQLite Fallback
-  const sqlite3 = require('sqlite3').verbose();
-  await new Promise((resolve, reject) => {
-    sqliteDb = new sqlite3.Database(SQLITE_FILE, (err) => {
-      if (err) return reject(err);
-      dbDriver = 'sqlite';
-      console.log(`[DB] Connected successfully to SQLite database at: ${SQLITE_FILE}`);
-      resolve();
-    });
-  });
-
-  await initSQLiteTables();
-  await seedInitialData();
+  // Schema migration check
+  try {
+    await pgPool.query(`ALTER TABLE documents ADD COLUMN IF NOT EXISTS encrypted_payload TEXT`);
+  } catch (e) {}
 }
 
 /**
@@ -89,10 +200,15 @@ async function initMySQLTables() {
       }
     }
   }
+
+  // Schema migration check
+  try {
+    await mysqlPool.query(`ALTER TABLE documents ADD COLUMN encrypted_payload LONGTEXT NULL`);
+  } catch (e) {}
 }
 
 /**
- * Initialize SQLite tables with equivalent schemas
+ * Initialize SQLite tables
  */
 async function initSQLiteTables() {
   const tableStatements = [
@@ -114,6 +230,7 @@ async function initSQLiteTables() {
       mime_type TEXT NOT NULL DEFAULT 'application/octet-stream',
       encrypted_file_reference TEXT NOT NULL,
       encryption_metadata TEXT NOT NULL,
+      encrypted_payload TEXT NULL,
       location_address TEXT NOT NULL,
       polygon_coordinates TEXT NOT NULL,
       kml_reference TEXT NULL,
@@ -157,14 +274,19 @@ async function initSQLiteTables() {
   for (const sql of tableStatements) {
     await run(sql);
   }
+
+  // Schema migration check for SQLite
+  try {
+    await run(`ALTER TABLE documents ADD COLUMN encrypted_payload TEXT`);
+  } catch (e) {}
 }
 
 /**
- * Seed initial test users and sample document if empty
+ * Seed initial test users if empty
  */
 async function seedInitialData() {
   const existing = await query("SELECT COUNT(*) as cnt FROM users");
-  const count = existing[0]?.cnt || 0;
+  const count = parseInt(existing[0]?.cnt || 0, 10);
   if (count === 0) {
     console.log('[DB] Seeding default test credentials...');
     const salt = await bcrypt.genSalt(10);
@@ -175,29 +297,42 @@ async function seedInitialData() {
 
     await run(
       "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
-      ['Dr. Edward Chow', 'edward@chow-s.com', edwardHash, 'sender']
-    );
-    await run(
-      "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
-      ['Ashish Korpe', 'ashish@uccs.edu', ashishHash, 'receiver']
-    );
-    await run(
-      "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
       ['Alice Vance (Sender)', 'alice.sender@uccs.edu', senderHash, 'sender']
     );
     await run(
       "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
       ['Bob Miller (Receiver)', 'bob.receiver@uccs.edu', receiverHash, 'receiver']
     );
+    await run(
+      "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
+      ['Dr. Edward Chow', 'edward@chow-s.com', edwardHash, 'sender']
+    );
+    await run(
+      "INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)",
+      ['Ashish Korpe', 'ashish@uccs.edu', ashishHash, 'receiver']
+    );
     console.log('[DB] Default test users created successfully.');
   }
+}
+
+/**
+ * Convert MySQL/SQLite '?' placeholders to PostgreSQL '$1, $2, ...'
+ */
+function convertPlaceholders(sql) {
+  let index = 1;
+  return sql.replace(/\?/g, () => `$${index++}`);
 }
 
 /**
  * Standard query returning an array of rows
  */
 async function query(sql, params = []) {
-  if (dbDriver === 'mysql') {
+  if (!dbDriver) await initDb();
+  if (dbDriver === 'postgres') {
+    const pgSql = convertPlaceholders(sql);
+    const result = await pgPool.query(pgSql, params);
+    return result.rows || [];
+  } else if (dbDriver === 'mysql') {
     const [rows] = await mysqlPool.query(sql, params);
     return rows;
   } else {
@@ -214,7 +349,12 @@ async function query(sql, params = []) {
  * Standard get returning a single row
  */
 async function get(sql, params = []) {
-  if (dbDriver === 'mysql') {
+  if (!dbDriver) await initDb();
+  if (dbDriver === 'postgres') {
+    const pgSql = convertPlaceholders(sql);
+    const result = await pgPool.query(pgSql, params);
+    return result.rows[0] || null;
+  } else if (dbDriver === 'mysql') {
     const [rows] = await mysqlPool.query(sql, params);
     return rows[0] || null;
   } else {
@@ -231,7 +371,17 @@ async function get(sql, params = []) {
  * Run an INSERT, UPDATE, or DELETE query
  */
 async function run(sql, params = []) {
-  if (dbDriver === 'mysql') {
+  if (!dbDriver) await initDb();
+  if (dbDriver === 'postgres') {
+    let pgSql = convertPlaceholders(sql);
+    const isInsert = pgSql.trim().toUpperCase().startsWith('INSERT INTO');
+    if (isInsert && !pgSql.toUpperCase().includes('RETURNING')) {
+      pgSql += ' RETURNING id';
+    }
+    const result = await pgPool.query(pgSql, params);
+    const insertId = result.rows && result.rows[0]?.id ? result.rows[0].id : null;
+    return { insertId, changes: result.rowCount };
+  } else if (dbDriver === 'mysql') {
     const [result] = await mysqlPool.query(sql, params);
     return { insertId: result.insertId, changes: result.affectedRows };
   } else {

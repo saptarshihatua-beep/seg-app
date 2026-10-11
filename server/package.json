@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node tests/run-tests.js"
+    "test": "node tests/run-tests.js && node tests/e2e-delivery-test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -19,6 +19,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.10.1",
+    "pg": "^8.23.1",
     "sqlite3": "^5.1.7"
   }
 }

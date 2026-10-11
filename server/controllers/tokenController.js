@@ -94,9 +94,11 @@ async function validateToken(req, res) {
     const doc = await db.get(
       `SELECT d.id, d.original_filename, d.file_size, d.mime_type, d.location_address,
               d.polygon_coordinates, d.receiver_email, d.kml_reference, d.status,
-              u.name as sender_name, u.email as sender_email, d.encryption_metadata
+              COALESCE(u.name, 'Sender') as sender_name,
+              COALESCE(u.email, '') as sender_email,
+              d.encryption_metadata
        FROM documents d
-       JOIN users u ON d.sender_id = u.id
+       LEFT JOIN users u ON d.sender_id = u.id
        WHERE d.id = ?`,
       [tokenRecord.document_id]
     );

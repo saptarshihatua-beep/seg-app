@@ -6,6 +6,8 @@ const env = require('../config/env');
 const { parsePolygonCoordinates, isPointInPolygon, haversineDistanceMeters, getPolygonCentroid } = require('../utils/geoPolygon');
 const { hashToken } = require('../utils/cryptoUtils');
 
+const uploadDir = env.UPLOAD_DIR;
+
 // Ephemeral challenge cache for replay resistance { tokenHash: { nonce, issuedAt } }
 const challengeCache = new Map();
 
@@ -211,13 +213,17 @@ async function verifyAndAuthorize(req, res) {
       ]
     );
 
-    // Retrieve encrypted file payload
-    const uploadFilePath = path.join(__dirname, '..', env.UPLOAD_DIR, doc.encrypted_file_reference);
+    // Retrieve encrypted payload (prioritize database column, then disk, then metadata)
     let encryptedData = '';
-    if (fs.existsSync(uploadFilePath)) {
-      encryptedData = fs.readFileSync(uploadFilePath, 'utf8');
+    if (doc.encrypted_payload) {
+      encryptedData = doc.encrypted_payload;
     } else {
-      encryptedData = JSON.stringify(meta);
+      const uploadFilePath = path.join(uploadDir, doc.encrypted_file_reference);
+      if (fs.existsSync(uploadFilePath)) {
+        encryptedData = fs.readFileSync(uploadFilePath, 'utf8');
+      } else {
+        encryptedData = JSON.stringify(meta);
+      }
     }
 
     // Decrypt escrow key if configured
@@ -242,7 +248,7 @@ async function verifyAndAuthorize(req, res) {
           salt: meta.s,
           keyDelivery: meta.keyDelivery
         },
-        escrowKey: escrowKeyPlaintext // Provided if sender selected automated escrow delivery
+        escrowKey: escrowKeyPlaintext
       }
     });
 
