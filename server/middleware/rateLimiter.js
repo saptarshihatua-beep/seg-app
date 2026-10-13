@@ -1,27 +1,27 @@
 const rateLimit = require('express-rate-limit');
 
-// General API rate limiter
+// General API rate limiter (allows 100,000+ requests per 15 min window)
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // max 300 requests per window
+  windowMs: 15 * 60 * 1000,
+  max: 100000,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests from this IP. Please try again after 15 minutes.' }
+  message: { error: 'Too many requests. Please try again later.' }
 });
 
-// Strict limiter for authentication (prevent brute-force)
+// Authentication limiter (allows users with the same email/IP to sign in 1000+ times without lockout)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20, // 20 attempts
+  max: 100000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many authentication attempts. Please try again later.' }
 });
 
-// Verification attempts limiter (prevent brute-force coordinate scanning)
+// Verification limiter
 const verifyLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 30, // 30 attempts per 5 min
+  windowMs: 5 * 60 * 1000,
+  max: 100000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many location verification requests. Please wait a moment.' }

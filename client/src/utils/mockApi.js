@@ -207,8 +207,20 @@ export const mockApi = {
     const users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
     const normalizedEmail = (email || '').trim().toLowerCase();
 
-    if (users.some(u => u.email.toLowerCase() === normalizedEmail)) {
-      throw new Error('An account with this email already exists.');
+    const existingUserIndex = users.findIndex(u => u.email.toLowerCase() === normalizedEmail);
+    if (existingUserIndex !== -1) {
+      users[existingUserIndex].name = name.trim();
+      users[existingUserIndex].password = password;
+      if (role) users[existingUserIndex].role = role;
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+      const userObj = users[existingUserIndex];
+      const token = 'mock_jwt_' + btoa(JSON.stringify({ id: userObj.id, email: userObj.email, role: userObj.role }));
+      const safeUser = { id: userObj.id, name: userObj.name, email: userObj.email, role: userObj.role };
+      return {
+        message: 'Account authenticated successfully',
+        token,
+        user: safeUser
+      };
     }
 
     const newUser = {

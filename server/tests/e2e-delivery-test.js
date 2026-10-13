@@ -273,10 +273,27 @@ async function runComprehensiveTests() {
 
     assert.strictEqual(bobComposeRes.status, 201, 'Receiver role must be permitted to compose and send documents (HTTP 201)');
     assert(bobComposeRes.data.document.id, 'Document created by Bob must have a valid ID');
-    console.log('  ✓ Receiver role successfully composed and sent document without role restriction.');
+    // 13. Repeated sign in / re-authentication with same email (stress test)
+    console.log('\n[Test 13] Stress Test: High-frequency authentication with same email (30 iterations)...');
+    for (let i = 0; i < 30; i++) {
+      const repeatedLogin = await postJson(baseUrl, '/api/auth/login', {
+        email: 'alice.sender@uccs.edu',
+        password: 'Sender123!'
+      });
+      assert.strictEqual(repeatedLogin.status, 200, `Sign in iteration ${i + 1} must succeed`);
+    }
+    // Also test re-registering with the exact same email
+    const reRegisterRes = await postJson(baseUrl, '/api/auth/register', {
+      name: 'Alice Vance Updated',
+      email: 'alice.sender@uccs.edu',
+      password: 'Sender123!',
+      role: 'sender'
+    });
+    assert.strictEqual(reRegisterRes.status, 200, 'Re-registering with existing email must succeed and re-authenticate user');
+    console.log('  ✓ 30+ rapid sign-ins and re-registrations with the same email completed with no throttling.');
 
     console.log('\n================================================================');
-    console.log('   ALL 12 END-TO-END DOCUMENT DELIVERY VERIFICATION CHECKS PASSED');
+    console.log('   ALL 13 END-TO-END DOCUMENT DELIVERY VERIFICATION CHECKS PASSED');
     console.log('================================================================\n');
 
   } finally {

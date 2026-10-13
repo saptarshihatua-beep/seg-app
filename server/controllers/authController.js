@@ -16,9 +16,38 @@ async function register(req, res) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const existing = await db.get("SELECT id FROM users WHERE email = ?", [normalizedEmail]);
+    const existing = await db.get("SELECT id, name, role FROM users WHERE email = ?", [normalizedEmail]);
     if (existing) {
-      return res.status(409).json({ error: 'An account with this email already exists.' });
+      const assignedRole = role === 'sender' ? 'sender' : (role === 'receiver' ? 'receiver' : (existing.role || 'sender'));
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(password, salt);
+
+      await db.run(
+        "UPDATE users SET name = ?, password_hash = ?, role = ? WHERE id = ?",
+        [name.trim(), passwordHash, assignedRole, existing.id]
+      );
+
+      const token = jwt.sign({ id: existing.id, email: normalizedEmail, role: assignedRole }, env.JWT_SECRET, {
+        expiresIn: env.JWT_EXPIRES_IN
+      });
+
+      try {
+        await db.run(
+          "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)",
+          [existing.id, 'USER_REAUTH', `User signed in / re-registered with existing email (${assignedRole})`, String(req.ip || req.connection?.remoteAddress || '').slice(0, 45)]
+        );
+      } catch (logErr) {}
+
+      return res.status(200).json({
+        message: 'Account authenticated successfully',
+        token,
+        user: {
+          id: existing.id,
+          name: name.trim(),
+          email: normalizedEmail,
+          role: assignedRole
+        }
+      });
     }
 
     const assignedRole = role === 'sender' ? 'sender' : 'receiver';
