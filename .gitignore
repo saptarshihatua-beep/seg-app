@@ -25,6 +25,10 @@ server/uploads/kml/*
 client/.env
 server/.env
 DATABASE_URL.txt
+.env.neon
+.neon
+.agents/
+
 
 # Large binary files & tools
 cloudflared.exe
