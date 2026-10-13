@@ -24,6 +24,7 @@ server/uploads/kml/*
 .env.*.local
 client/.env
 server/.env
+DATABASE_URL.txt
 
 # Large binary files & tools
 cloudflared.exe
