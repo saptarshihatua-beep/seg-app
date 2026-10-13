@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import Navbar from './components/Navbar';
 import AuthView from './components/AuthView';
+import SidebarLayout from './components/dashboard/SidebarLayout';
 import ComposeDocument from './components/ComposeDocument';
 import SenderDashboard from './components/SenderDashboard';
 import ReceiverDashboard from './components/ReceiverDashboard';
@@ -57,72 +57,67 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#060a12] flex items-center justify-center text-cyan-400 font-mono text-sm">
-        Initializing Secure Enhanced Geolocking cryptographic subsystem...
+      <div className="min-h-screen bg-[#060a12] flex flex-col items-center justify-center text-cyan-400 font-mono text-xs gap-3">
+        <div className="w-8 h-8 rounded-full border-2 border-cyan-400 border-t-transparent animate-spin" />
+        <span>Initializing Secure Enhanced Geolocking cryptographic subsystem...</span>
       </div>
     );
   }
 
+  // If user is not authenticated and no direct verification link is being accessed, show the cinematic landing + auth view
+  if (!user && !targetVerifyToken) {
+    return (
+      <>
+        <AuthView onOpenDeliverables={() => setIsDeliverablesOpen(true)} />
+        <DeliverablesModal
+          isOpen={isDeliverablesOpen}
+          onClose={() => setIsDeliverablesOpen(false)}
+        />
+      </>
+    );
+  }
+
+  // Authenticated Application Dashboard (or direct token recipient)
   return (
-    <div className="min-h-screen bg-[#060a12] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black">
-      
-      {/* Top Navigation */}
-      <Navbar
+    <>
+      <SidebarLayout
         activeView={effectiveView}
         setActiveView={setActiveView}
         onOpenDeliverables={() => setIsDeliverablesOpen(true)}
-      />
-
-      {/* Main App Content */}
-      <main className="flex-1 p-4 lg:p-8 max-w-7xl mx-auto w-full">
-        {!user && !targetVerifyToken ? (
-          <AuthView onOpenDeliverables={() => setIsDeliverablesOpen(true)} />
-        ) : (
-          <>
-            {effectiveView === 'compose' && (
-              <ComposeDocument onDocumentCreated={handleDocumentCreated} />
-            )}
-
-            {effectiveView === 'sender_dash' && (
-              <SenderDashboard
-                onComposeClick={() => setActiveView('compose')}
-                onInspectDoc={(doc) => handleOpenVerification(doc)}
-              />
-            )}
-
-            {effectiveView === 'receiver_dash' && (
-              <ReceiverDashboard
-                onOpenVerification={(doc) => handleOpenVerification(doc)}
-              />
-            )}
-
-            {effectiveView === 'verify' && (
-              <AccessVerificationPage
-                initialToken={targetVerifyToken}
-                initialDocId={targetVerifyDocId}
-              />
-            )}
-
-            {effectiveView === 'audit' && (
-              <AuditLogViewer />
-            )}
-          </>
+      >
+        {effectiveView === 'compose' && (
+          <ComposeDocument onDocumentCreated={handleDocumentCreated} />
         )}
-      </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-6 text-center text-xs font-mono text-slate-500">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
-          <span>Project 4a: Secure Enhanced Geolocking (SEG 2.0) • UCCS CS6910</span>
-          <span>CryptoJS AES-256 • OGC KML 2.2 • Ray-Casting PIP • Single-Use Tokens</span>
-        </div>
-      </footer>
+        {effectiveView === 'sender_dash' && (
+          <SenderDashboard
+            onComposeClick={() => setActiveView('compose')}
+            onInspectDoc={(doc) => handleOpenVerification(doc)}
+          />
+        )}
 
-      {/* Deliverables Report Modal */}
+        {effectiveView === 'receiver_dash' && (
+          <ReceiverDashboard
+            onOpenVerification={(doc) => handleOpenVerification(doc)}
+          />
+        )}
+
+        {effectiveView === 'verify' && (
+          <AccessVerificationPage
+            initialToken={targetVerifyToken}
+            initialDocId={targetVerifyDocId}
+          />
+        )}
+
+        {effectiveView === 'audit' && (
+          <AuditLogViewer />
+        )}
+      </SidebarLayout>
+
       <DeliverablesModal
         isOpen={isDeliverablesOpen}
         onClose={() => setIsDeliverablesOpen(false)}
       />
-    </div>
+    </>
   );
 }
