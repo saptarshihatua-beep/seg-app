@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, ShieldAlert, MapPin, Navigation, Key, Download, 
-  RefreshCw, CheckCircle2, XCircle, AlertTriangle, Wifi, Radio, Lock, Unlock, Eye, Sparkles
+  RefreshCw, CheckCircle2, XCircle, AlertTriangle, Wifi, Radio, Lock, Unlock, Eye, EyeOff, Sparkles
 } from 'lucide-react';
 import InteractiveMap from './InteractiveMap';
 import { api } from '../utils/api';
@@ -32,6 +32,7 @@ export default function AccessVerificationPage({ initialToken, initialDocId }) {
 
   // Decryption state
   const [decryptionKey, setDecryptionKey] = useState('');
+  const [showDecryptionKey, setShowDecryptionKey] = useState(false);
   const [decryptedResult, setDecryptedResult] = useState(null);
   const [decryptedContent, setDecryptedContent] = useState(null);
   const [decrypting, setDecrypting] = useState(false);
@@ -163,9 +164,11 @@ export default function AccessVerificationPage({ initialToken, initialDocId }) {
 
       setVerificationResult(res);
 
-      // If server provided escrow key, auto-fill it
+      // If server provided escrow key (and sender chose automated escrow), auto-fill it
       if (res.granted && res.document.escrowKey) {
         setDecryptionKey(res.document.escrowKey);
+      } else {
+        setDecryptionKey('');
       }
     } catch (err) {
       setVerificationResult({
@@ -515,18 +518,50 @@ export default function AccessVerificationPage({ initialToken, initialDocId }) {
                 </div>
 
                 <div className="space-y-3 font-mono text-xs">
+                  {/* Status Banner explaining whether key is from escrow or requires sender passphrase */}
+                  {verificationResult.document?.escrowKey ? (
+                    <div className="p-3 bg-cyan-950/40 border border-cyan-500/50 rounded-xl text-cyan-200 text-xs font-mono flex items-start gap-2.5">
+                      <ShieldCheck className="w-4 h-4 text-cyan-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <b className="text-white block">Geofence Escrow Key Loaded:</b>
+                        <span>Automated escrow key released by server boundary. Password is securely loaded (masked). Click <b>Decrypt Content</b> to view.</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-amber-950/40 border border-amber-500/50 rounded-xl text-amber-200 text-xs font-mono flex items-start gap-2.5">
+                      <Key className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <b className="text-white block">Sender Secret Passphrase Required:</b>
+                        <span>The sender encrypted this document with a private password. The server will not reveal this password. Please enter the password communicated to you directly by the sender.</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div>
-                    <label className="block text-slate-400 mb-1">
-                      AES Decryption Passphrase:
+                    <label className="block text-slate-400 mb-1 flex items-center justify-between">
+                      <span>AES Decryption Passphrase:</span>
+                      <span className="text-[10px] text-slate-500">
+                        {verificationResult.document?.escrowKey ? 'Auto-loaded from Escrow' : 'Must be provided by sender'}
+                      </span>
                     </label>
                     <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={decryptionKey}
-                        onChange={(e) => setDecryptionKey(e.target.value)}
-                        placeholder="Enter AES Key (e.g., myvoice)"
-                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-white font-mono focus:border-emerald-500 focus:outline-none"
-                      />
+                      <div className="relative flex-1">
+                        <input
+                          type={showDecryptionKey ? 'text' : 'password'}
+                          value={decryptionKey}
+                          onChange={(e) => setDecryptionKey(e.target.value)}
+                          placeholder="Enter secret password provided by sender..."
+                          className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-4 pr-10 py-2.5 text-white font-mono focus:border-emerald-500 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowDecryptionKey(!showDecryptionKey)}
+                          className="absolute right-3 top-2.5 text-slate-400 hover:text-white"
+                          title={showDecryptionKey ? "Hide password" : "Show password"}
+                        >
+                          {showDecryptionKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
                       <button
                         type="button"
                         onClick={handleDecrypt}

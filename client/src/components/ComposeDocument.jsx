@@ -42,7 +42,7 @@ export default function ComposeDocument({ onDocumentCreated }) {
   const [wifiBssid, setWifiBssid] = useState('00:14:22:01:23:45');
   const [requireBle, setRequireBle] = useState(false);
   const [bleUuid, setBleUuid] = useState('e2c56db5-dffb-48d2-b060-d0f5a71096e0');
-  const [keyDeliveryMode, setKeyDeliveryMode] = useState('escrow_geolocked'); // 'escrow_geolocked' or 'out_of_band'
+  const [keyDeliveryMode, setKeyDeliveryMode] = useState('out_of_band'); // Default to zero-knowledge out-of-band
 
   // Submission state
   const [loading, setLoading] = useState(false);
@@ -65,6 +65,7 @@ export default function ComposeDocument({ onDocumentCreated }) {
   const loadUccsPreset = () => {
     setReceiverEmail('bob.receiver@uccs.edu');
     setEncryptionKey('myvoice');
+    setKeyDeliveryMode('out_of_band');
     setLocationAddress(UCCS_PRESET.address);
     setPolygonPoints(UCCS_PRESET.coords);
     setMapCenter(UCCS_PRESET.center);
@@ -327,23 +328,12 @@ export default function ComposeDocument({ onDocumentCreated }) {
 
           {/* Step 4: Key Delivery Strategy */}
           <div>
-            <label className="block text-xs font-mono text-cyan-400 uppercase tracking-wider mb-2">
-              4. Key Delivery Architecture
+            <label className="block text-xs font-mono text-cyan-400 uppercase tracking-wider mb-2 flex justify-between">
+              <span>4. Key Delivery Strategy</span>
+              <span className="text-[10px] text-cyan-300 font-bold">Recommended: Out-of-Band</span>
             </label>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <label className={`p-3 rounded-xl border cursor-pointer transition ${keyDeliveryMode === 'escrow_geolocked' ? 'bg-cyan-950/40 border-cyan-500 text-cyan-200' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>
-                <input
-                  type="radio"
-                  name="keyMode"
-                  value="escrow_geolocked"
-                  checked={keyDeliveryMode === 'escrow_geolocked'}
-                  onChange={() => setKeyDeliveryMode('escrow_geolocked')}
-                  className="hidden"
-                />
-                <b className="block text-white mb-0.5">Automated Escrow</b>
-                Server releases AES key only upon verified physical location.
-              </label>
-              <label className={`p-3 rounded-xl border cursor-pointer transition ${keyDeliveryMode === 'out_of_band' ? 'bg-cyan-950/40 border-cyan-500 text-cyan-200' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+              <label className={`p-3 rounded-xl border cursor-pointer transition ${keyDeliveryMode === 'out_of_band' ? 'bg-cyan-950/70 border-cyan-400 text-cyan-200 shadow-md shadow-cyan-950/50' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>
                 <input
                   type="radio"
                   name="keyMode"
@@ -352,8 +342,31 @@ export default function ComposeDocument({ onDocumentCreated }) {
                   onChange={() => setKeyDeliveryMode('out_of_band')}
                   className="hidden"
                 />
-                <b className="block text-white mb-0.5">Out-of-Band (Zero-Knowledge)</b>
-                Sender shares passphrase directly via separate secure channel.
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                  <b className="text-white">Out-of-Band (Private)</b>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-snug">
+                  The password is <b>never given to the receiver by the server</b>. You communicate the password directly to the receiver when you choose.
+                </p>
+              </label>
+
+              <label className={`p-3 rounded-xl border cursor-pointer transition ${keyDeliveryMode === 'escrow_geolocked' ? 'bg-cyan-950/70 border-cyan-400 text-cyan-200 shadow-md shadow-cyan-950/50' : 'bg-slate-950 border-slate-800 text-slate-400'}`}>
+                <input
+                  type="radio"
+                  name="keyMode"
+                  value="escrow_geolocked"
+                  checked={keyDeliveryMode === 'escrow_geolocked'}
+                  onChange={() => setKeyDeliveryMode('escrow_geolocked')}
+                  className="hidden"
+                />
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                  <b className="text-white">Automated Escrow</b>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-snug">
+                  The server automatically releases the key to the receiver once they verify their location inside the geofence boundary.
+                </p>
               </label>
             </div>
           </div>
