@@ -45,7 +45,7 @@ async function getSystemStats(req, res) {
 
     if (isSender) {
       const docStat = await db.get("SELECT COUNT(*) as cnt FROM documents WHERE sender_id = ?", [userId]);
-      totalDocs = docStat ? docStat.cnt : 0;
+      totalDocs = parseInt(docStat?.cnt || 0, 10);
 
       const vStat = await db.get(
         `SELECT 
@@ -56,12 +56,12 @@ async function getSystemStats(req, res) {
          WHERE d.sender_id = ?`,
         [userId]
       );
-      verifiedCount = vStat?.granted_cnt || 0;
-      failedCount = vStat?.denied_cnt || 0;
+      verifiedCount = parseInt(vStat?.granted_cnt || 0, 10);
+      failedCount = parseInt(vStat?.denied_cnt || 0, 10);
     } else {
       const userEmail = (req.user.email || '').trim().toLowerCase();
       const docStat = await db.get("SELECT COUNT(*) as cnt FROM documents WHERE LOWER(receiver_email) = ? OR receiver_id = ?", [userEmail, userId]);
-      totalDocs = docStat ? docStat.cnt : 0;
+      totalDocs = parseInt(docStat?.cnt || 0, 10);
 
       const vStat = await db.get(
         `SELECT 
@@ -72,8 +72,8 @@ async function getSystemStats(req, res) {
          WHERE d.receiver_id = ? OR LOWER(d.receiver_email) = ?`,
         [userId, userEmail]
       );
-      verifiedCount = vStat?.granted_cnt || 0;
-      failedCount = vStat?.denied_cnt || 0;
+      verifiedCount = parseInt(vStat?.granted_cnt || 0, 10);
+      failedCount = parseInt(vStat?.denied_cnt || 0, 10);
     }
 
     res.json({

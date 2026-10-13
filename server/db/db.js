@@ -30,7 +30,13 @@ async function initDb() {
         pgPool = new Pool({
           connectionString: connString,
           ssl: connString && connString.includes('localhost') ? false : { rejectUnauthorized: false },
-          connectionTimeoutMillis: 5000
+          max: parseInt(process.env.DB_POOL_MAX || '5', 10),
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 10000
+        });
+
+        pgPool.on('error', (err) => {
+          console.warn('[DB] Unexpected error on idle PostgreSQL client:', err.message);
         });
 
         // Test connection
@@ -121,6 +127,7 @@ async function initDb() {
     await initSQLiteTables();
     await seedInitialData();
   })().catch((err) => {
+    dbDriver = null;
     initPromise = null; // allow retry on next request
     throw err;
   });

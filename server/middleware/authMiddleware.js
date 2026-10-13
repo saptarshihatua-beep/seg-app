@@ -12,7 +12,11 @@ async function authenticateToken(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET);
-    const user = await db.get("SELECT id, name, email, role FROM users WHERE id = ?", [decoded.id]);
+    const userId = parseInt(decoded.id, 10);
+    if (isNaN(userId)) {
+      return res.status(401).json({ error: 'Invalid user session token.' });
+    }
+    const user = await db.get("SELECT id, name, email, role FROM users WHERE id = ?", [userId]);
     if (!user) {
       return res.status(401).json({ error: 'User account no longer exists.' });
     }

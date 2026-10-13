@@ -8,8 +8,11 @@ const { parsePolygonCoordinates } = require('../utils/geoPolygon');
  */
 async function generateNewToken(req, res) {
   try {
-    const docId = req.params.docId;
-    const userId = req.user.id;
+    const docId = parseInt(req.params.docId, 10);
+    if (isNaN(docId)) {
+      return res.status(400).json({ error: 'Invalid document ID.' });
+    }
+    const userId = parseInt(req.user.id, 10);
     const userEmail = (req.user.email || '').trim().toLowerCase();
 
     const doc = await db.get(

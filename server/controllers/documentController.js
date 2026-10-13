@@ -236,6 +236,8 @@ async function getSenderDocuments(req, res) {
 
     const formatted = docs.map(d => ({
       ...d,
+      successful_verifications: parseInt(d.successful_verifications || 0, 10),
+      failed_verifications: parseInt(d.failed_verifications || 0, 10),
       polygon_coordinates: parsePolygonCoordinates(d.polygon_coordinates),
       encryption_metadata: JSON.parse(d.encryption_metadata || '{}')
     }));
@@ -294,7 +296,10 @@ async function getReceiverDocuments(req, res) {
  */
 async function getDocumentDetails(req, res) {
   try {
-    const docId = req.params.id;
+    const docId = parseInt(req.params.id, 10);
+    if (isNaN(docId)) {
+      return res.status(400).json({ error: 'Invalid document ID.' });
+    }
     const doc = await db.get(
       `SELECT d.*, COALESCE(u.name, 'Sender') as sender_name, COALESCE(u.email, '') as sender_email
        FROM documents d
