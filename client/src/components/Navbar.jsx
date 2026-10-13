@@ -36,22 +36,18 @@ export default function Navbar({ activeView, setActiveView, onOpenDeliverables }
         {/* Navigation Tabs */}
         {user && (
           <div className="flex items-center gap-1 bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs font-mono">
-            {user.role === 'sender' || user.role === 'admin' ? (
-              <>
-                <button
-                  onClick={() => setActiveView('compose')}
-                  className={`px-3 py-1.5 rounded-lg transition ${activeView === 'compose' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
-                >
-                  Compose & Lock
-                </button>
-                <button
-                  onClick={() => setActiveView('sender_dash')}
-                  className={`px-3 py-1.5 rounded-lg transition ${activeView === 'sender_dash' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
-                >
-                  Sender Repository
-                </button>
-              </>
-            ) : null}
+            <button
+              onClick={() => setActiveView('compose')}
+              className={`px-3 py-1.5 rounded-lg transition ${activeView === 'compose' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
+            >
+              Compose & Lock
+            </button>
+            <button
+              onClick={() => setActiveView('sender_dash')}
+              className={`px-3 py-1.5 rounded-lg transition ${activeView === 'sender_dash' ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'}`}
+            >
+              Sender Repository
+            </button>
 
             <button
               onClick={() => setActiveView('receiver_dash')}

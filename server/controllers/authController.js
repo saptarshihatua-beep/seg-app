@@ -129,8 +129,10 @@ async function getMe(req, res) {
 
 async function listReceivers(req, res) {
   try {
+    const userId = req.user?.id || 0;
     const receivers = await db.query(
-      "SELECT id, name, email FROM users WHERE role = 'receiver' OR role = 'admin' ORDER BY name ASC"
+      "SELECT id, name, email, role FROM users WHERE id != ? ORDER BY name ASC",
+      [userId]
     );
     res.json({ receivers });
   } catch (err) {

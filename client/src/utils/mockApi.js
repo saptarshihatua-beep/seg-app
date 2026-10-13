@@ -243,8 +243,9 @@ export const mockApi = {
   async listReceivers() {
     initStorage();
     const users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
+    const currentUser = JSON.parse(localStorage.getItem('seg_user') || '{}');
     const receivers = users
-      .filter(u => u.role === 'receiver')
+      .filter(u => u.email !== currentUser.email)
       .map(u => ({ id: u.id, name: u.name, email: u.email }));
     return { receivers };
   },

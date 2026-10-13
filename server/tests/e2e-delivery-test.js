@@ -254,8 +254,29 @@ async function runComprehensiveTests() {
     assert.strictEqual(unauthorizedAccess.status, 401, 'Unauthenticated request must be rejected');
     console.log('  ✓ Unauthorized access rejected (HTTP 401).');
 
+    // 12. Verification that Receiver role can also compose and send geolocked documents
+    console.log('\n[Test 12] Receiver role (Bob) composes and sends a geolocked document to Alice...');
+    const bobComposeRes = await postJson(baseUrl, '/api/documents', {
+      receiverEmail: 'alice.sender@uccs.edu',
+      locationAddress: 'Engineering Building, 1420 Austin Bluffs Parkway, Colorado Springs, CO 80918',
+      polygonCoordinates: [
+        { lat: 38.894143, lng: -104.800769 },
+        { lat: 38.893867, lng: -104.801091 },
+        { lat: 38.893178, lng: -104.799760 },
+        { lat: 38.893445, lng: -104.799589 }
+      ],
+      encryptionKey: 'bob_response_key',
+      clientEncryptedPayload: encryptClientSide('Response from Bob', 'bob_response_key'),
+      originalFilename: 'bob_response.txt',
+      keyDeliveryMode: 'escrow_geolocked'
+    }, receiverToken);
+
+    assert.strictEqual(bobComposeRes.status, 201, 'Receiver role must be permitted to compose and send documents (HTTP 201)');
+    assert(bobComposeRes.data.document.id, 'Document created by Bob must have a valid ID');
+    console.log('  ✓ Receiver role successfully composed and sent document without role restriction.');
+
     console.log('\n================================================================');
-    console.log('   ALL 11 END-TO-END DOCUMENT DELIVERY VERIFICATION CHECKS PASSED');
+    console.log('   ALL 12 END-TO-END DOCUMENT DELIVERY VERIFICATION CHECKS PASSED');
     console.log('================================================================\n');
 
   } finally {

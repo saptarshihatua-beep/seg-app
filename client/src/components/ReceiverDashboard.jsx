@@ -6,7 +6,7 @@ import {
 import { api } from '../utils/api';
 import InteractiveMap from './InteractiveMap';
 
-export default function ReceiverDashboard({ onOpenVerification }) {
+export default function ReceiverDashboard({ onOpenVerification, onComposeClick }) {
   const [documents, setDocuments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -57,13 +57,24 @@ export default function ReceiverDashboard({ onOpenVerification }) {
               To retrieve and decrypt, proceed to the authorized physical area.
             </p>
           </div>
-          <button
-            onClick={fetchReceiverDocs}
-            className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-            title="Refresh list"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            {onComposeClick && (
+              <button
+                onClick={onComposeClick}
+                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Send a Document</span>
+              </button>
+            )}
+            <button
+              onClick={fetchReceiverDocs}
+              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+              title="Refresh list"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -87,8 +98,17 @@ export default function ReceiverDashboard({ onOpenVerification }) {
             <FileText className="w-12 h-12 text-slate-600 mx-auto" />
             <h3 className="text-base font-semibold text-white">No Shared Documents</h3>
             <p className="text-slate-400 text-xs max-w-sm mx-auto">
-              You do not have any geolocked documents waiting for authorization. Senders can share documents directly to your registered email address.
+              You do not have any incoming geolocked documents yet. You can also encrypt and send documents to any recipient across custom geofences.
             </p>
+            {onComposeClick && (
+              <button
+                onClick={onComposeClick}
+                className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono transition shadow-lg shadow-cyan-500/20"
+              >
+                <Lock className="w-4 h-4" />
+                <span>Compose & Geolock a Document</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

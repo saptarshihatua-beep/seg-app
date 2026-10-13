@@ -40,9 +40,8 @@ export default function App() {
     }
   }, [user?.role]);
 
-  const effectiveView = (user && user.role === 'receiver' && (activeView === 'compose' || activeView === 'sender_dash'))
-    ? 'receiver_dash'
-    : activeView;
+  // Allow all users to access compose, sender repository, and inbox
+  const effectiveView = activeView;
 
   // Handler when receiver clicks "Verify & Unlock" on a document from ReceiverDashboard
   const handleOpenVerification = (doc) => {
@@ -99,6 +98,7 @@ export default function App() {
         {effectiveView === 'receiver_dash' && (
           <ReceiverDashboard
             onOpenVerification={(doc) => handleOpenVerification(doc)}
+            onComposeClick={() => setActiveView('compose')}
           />
         )}
 

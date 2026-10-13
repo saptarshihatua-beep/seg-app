@@ -5,11 +5,11 @@ const tokenController = require('../controllers/tokenController');
 const { authenticateToken, requireRole } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 
-// Create geolocked document (Senders or Admins)
-router.post('/', authenticateToken, requireRole(['sender', 'admin']), upload.single('file'), documentController.createDocument);
+// Create geolocked document (All authenticated users can compose and send)
+router.post('/', authenticateToken, upload.single('file'), documentController.createDocument);
 
-// Get sender's uploaded documents
-router.get('/sender', authenticateToken, requireRole(['sender', 'admin']), documentController.getSenderDocuments);
+// Get sender's uploaded documents (All authenticated users)
+router.get('/sender', authenticateToken, documentController.getSenderDocuments);
 
 // Get receiver's documents
 router.get('/receiver', authenticateToken, documentController.getReceiverDocuments);

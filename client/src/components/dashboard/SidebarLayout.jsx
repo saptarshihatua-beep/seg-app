@@ -33,14 +33,14 @@ export default function SidebarLayout({
           id: 'compose',
           label: 'Compose & Geolock',
           icon: FileText,
-          roles: ['sender', 'admin'],
-          badge: 'Sender'
+          roles: ['sender', 'receiver', 'admin'],
+          badge: 'Encrypt'
         },
         {
           id: 'sender_dash',
           label: 'Sender Repository',
           icon: Send,
-          roles: ['sender', 'admin'],
+          roles: ['sender', 'receiver', 'admin'],
           badge: 'Docs'
         },
         {
