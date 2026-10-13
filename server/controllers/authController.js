@@ -74,11 +74,14 @@ async function login(req, res) {
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      // Log failed login
-      await db.run(
-        "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)",
-        [user.id, 'LOGIN_FAILED', 'Invalid password attempt', req.ip || req.connection?.remoteAddress]
-      );
+      try {
+        await db.run(
+          "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)",
+          [user.id, 'LOGIN_FAILED', 'Invalid password attempt', String(req.ip || req.connection?.remoteAddress || '').slice(0, 45)]
+        );
+      } catch (logErr) {
+        console.warn('[Audit Log Warning]:', logErr.message);
+      }
       return res.status(401).json({ error: 'Invalid email or password credentials.' });
     }
 
@@ -87,10 +90,14 @@ async function login(req, res) {
     });
 
     // Log successful login
-    await db.run(
-      "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)",
-      [user.id, 'LOGIN_SUCCESS', `User logged in from ${req.ip || 'remote'}`, req.ip || req.connection?.remoteAddress]
-    );
+    try {
+      await db.run(
+        "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)",
+        [user.id, 'LOGIN_SUCCESS', `User logged in from ${req.ip || 'remote'}`, String(req.ip || req.connection?.remoteAddress || '').slice(0, 45)]
+      );
+    } catch (logErr) {
+      console.warn('[Audit Log Warning]:', logErr.message);
+    }
 
     res.json({
       message: 'Login successful',
