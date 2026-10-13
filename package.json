@@ -10,7 +10,7 @@
     "server": "npm --prefix server start",
     "client": "npm --prefix client run dev -- --host 0.0.0.0",
     "test": "npm --prefix server test",
-    "build": "cd client && npm install && npm run build"
+    "build": "npm --prefix client run build"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

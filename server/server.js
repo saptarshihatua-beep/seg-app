@@ -36,6 +36,16 @@ app.use(cors({
 app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ extended: true, limit: '30mb' }));
 
+// URL Normalization Middleware for Vercel Serverless Function routing
+app.use((req, res, next) => {
+  if (req.originalUrl && (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/uploads'))) {
+    req.url = req.originalUrl;
+  } else if (!req.url.startsWith('/api') && !req.url.startsWith('/uploads')) {
+    req.url = '/api' + (req.url.startsWith('/') ? req.url : '/' + req.url);
+  }
+  next();
+});
+
 // Healthcheck & Diagnostics Endpoint (no DB required, never exposes secret values)
 app.get('/api/health', async (req, res) => {
   let dbStatus = 'ok';
