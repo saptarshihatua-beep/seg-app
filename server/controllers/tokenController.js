@@ -56,7 +56,8 @@ async function generateNewToken(req, res) {
  */
 async function validateToken(req, res) {
   try {
-    const { token, docId } = req.query;
+    const token = req.query.token || req.params.token;
+    const docId = req.query.docId || req.params.docId;
 
     if (!token) {
       return res.status(400).json({ error: 'Access token is required.' });
@@ -127,6 +128,8 @@ async function validateToken(req, res) {
         receiverEmail: doc.receiver_email,
         authWifi: meta.authWifi,
         authBle: meta.authBle,
+        requiresWifi: Boolean(meta.authWifi),
+        requiresBle: Boolean(meta.authBle),
         keyDelivery: meta.keyDelivery
       },
       token: {

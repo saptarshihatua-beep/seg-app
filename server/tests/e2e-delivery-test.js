@@ -345,8 +345,110 @@ async function runComprehensiveTests() {
     assert(!listAfter.data.receivers.some(r => r.email === 'temp.obsolete@uccs.edu'), 'Deleted user must no longer appear in stocked recipients');
     console.log('  ✓ Stocked recipient successfully deleted and removed from database.');
 
+    // 15. Secondary Multi-Factor: Wi-Fi BSSID Enforced Verification Check
+    console.log('\n[Test 15] Secondary MFA: Enforced Wi-Fi BSSID check (mismatch rejection & valid approval)...');
+    const wifiDocRes = await postJson(baseUrl, '/api/documents', {
+      receiverEmail: 'bob.receiver@uccs.edu',
+      locationAddress: 'Engineering Building, UCCS',
+      polygonCoordinates: [
+        { lat: 38.894143, lng: -104.800769 },
+        { lat: 38.893867, lng: -104.801091 },
+        { lat: 38.893178, lng: -104.799760 },
+        { lat: 38.893445, lng: -104.799589 }
+      ],
+      encryptionKey: 'wifi_secret_key',
+      clientEncryptedPayload: encryptClientSide('Classified Wi-Fi Payload', 'wifi_secret_key'),
+      originalFilename: 'wifi_restricted_doc.txt',
+      keyDeliveryMode: 'escrow_geolocked',
+      authorizedWifiBssid: '50:91:e3:55:92:cb'
+    }, senderToken);
+    assert.strictEqual(wifiDocRes.status, 201);
+    const wifiToken = wifiDocRes.data.shareInfo.token;
+
+    // Token validation must reflect requiresWifi
+    const tokenValRes = await getJson(baseUrl, `/api/tokens/validate/${wifiToken}`);
+    assert.strictEqual(tokenValRes.status, 200);
+    assert.strictEqual(tokenValRes.data.document.requiresWifi, true);
+
+    // Mismatch Wi-Fi BSSID inside boundary -> HTTP 403 WIFI_MISMATCH
+    const badWifiVerif = await postJson(baseUrl, '/api/verify/authorize', {
+      token: wifiToken,
+      latitude: 38.893650,
+      longitude: -104.800200,
+      accuracy: 12,
+      clientTimestamp: Date.now(),
+      wifiBssid: '00:11:22:33:44:55'
+    }, receiverToken);
+    assert.strictEqual(badWifiVerif.status, 403);
+    assert.strictEqual(badWifiVerif.data.reason, 'WIFI_MISMATCH');
+    console.log('  ✓ Mismatched Wi-Fi BSSID correctly rejected (HTTP 403 WIFI_MISMATCH).');
+
+    // Matching Wi-Fi BSSID inside boundary -> HTTP 200 GRANTED
+    const goodWifiVerif = await postJson(baseUrl, '/api/verify/authorize', {
+      token: wifiToken,
+      latitude: 38.893650,
+      longitude: -104.800200,
+      accuracy: 12,
+      clientTimestamp: Date.now(),
+      wifiBssid: '50:91:e3:55:92:cb'
+    }, receiverToken);
+    assert.strictEqual(goodWifiVerif.status, 200);
+    assert.strictEqual(goodWifiVerif.data.granted, true);
+    console.log('  ✓ Matching Wi-Fi BSSID physical presence certified (HTTP 200 GRANTED).');
+
+    // 16. Secondary Multi-Factor: In-Building BLE Beacon UUID Enforced Check
+    console.log('\n[Test 16] Secondary MFA: Enforced In-Building BLE Beacon check (mismatch rejection & valid approval)...');
+    const bleDocRes = await postJson(baseUrl, '/api/documents', {
+      receiverEmail: 'bob.receiver@uccs.edu',
+      locationAddress: 'Engineering Building, UCCS',
+      polygonCoordinates: [
+        { lat: 38.894143, lng: -104.800769 },
+        { lat: 38.893867, lng: -104.801091 },
+        { lat: 38.893178, lng: -104.799760 },
+        { lat: 38.893445, lng: -104.799589 }
+      ],
+      encryptionKey: 'ble_secret_key',
+      clientEncryptedPayload: encryptClientSide('Classified BLE Payload', 'ble_secret_key'),
+      originalFilename: 'ble_restricted_doc.txt',
+      keyDeliveryMode: 'escrow_geolocked',
+      authorizedBleUuid: 'e2c56db5-dffb-48d2-b060-d0f5a71096e0'
+    }, senderToken);
+    assert.strictEqual(bleDocRes.status, 201);
+    const bleToken = bleDocRes.data.shareInfo.token;
+
+    // Token validation must reflect requiresBle
+    const bleTokenVal = await getJson(baseUrl, `/api/tokens/validate/${bleToken}`);
+    assert.strictEqual(bleTokenVal.status, 200);
+    assert.strictEqual(bleTokenVal.data.document.requiresBle, true);
+
+    // Mismatch BLE Beacon UUID inside boundary -> HTTP 403 BLE_MISMATCH
+    const badBleVerif = await postJson(baseUrl, '/api/verify/authorize', {
+      token: bleToken,
+      latitude: 38.893650,
+      longitude: -104.800200,
+      accuracy: 12,
+      clientTimestamp: Date.now(),
+      bleBeaconUuid: '00000000-0000-0000-0000-000000000000'
+    }, receiverToken);
+    assert.strictEqual(badBleVerif.status, 403);
+    assert.strictEqual(badBleVerif.data.reason, 'BLE_MISMATCH');
+    console.log('  ✓ Mismatched In-Building BLE Beacon UUID correctly rejected (HTTP 403 BLE_MISMATCH).');
+
+    // Matching BLE Beacon UUID inside boundary -> HTTP 200 GRANTED
+    const goodBleVerif = await postJson(baseUrl, '/api/verify/authorize', {
+      token: bleToken,
+      latitude: 38.893650,
+      longitude: -104.800200,
+      accuracy: 12,
+      clientTimestamp: Date.now(),
+      bleBeaconUuid: 'e2c56db5-dffb-48d2-b060-d0f5a71096e0'
+    }, receiverToken);
+    assert.strictEqual(goodBleVerif.status, 200);
+    assert.strictEqual(goodBleVerif.data.granted, true);
+    console.log('  ✓ Matching In-Building BLE Beacon UUID verified (HTTP 200 GRANTED).');
+
     console.log('\n================================================================');
-    console.log('   ALL 14 END-TO-END DOCUMENT DELIVERY VERIFICATION CHECKS PASSED');
+    console.log('   ALL 16 END-TO-END DOCUMENT DELIVERY VERIFICATION CHECKS PASSED');
     console.log('================================================================\n');
 
   } finally {

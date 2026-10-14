@@ -170,10 +170,20 @@ async function verifyAndAuthorize(req, res) {
       const reportedBssid = (wifiBssid || '').toLowerCase().trim();
       if (!reportedBssid || reportedBssid !== normalizedReqBssid) {
         await logVerificationAttempt(doc.id, req.user?.id, 'WIFI_BSSID', 'DENIED_WIFI_MISMATCH');
+        await db.run(
+          "INSERT INTO audit_logs (user_id, action, document_id, details, ip_address) VALUES (?, ?, ?, ?, ?)",
+          [
+            req.user?.id || null,
+            'WIFI_BSSID_MISMATCH',
+            doc.id,
+            `Second-layer Wi-Fi verification failed. Reported BSSID: ${wifiBssid || 'None'} (Mismatch with sender requirements).`,
+            req.ip || req.connection?.remoteAddress
+          ]
+        );
         return res.status(403).json({
           granted: false,
           reason: 'WIFI_MISMATCH',
-          error: `Second-layer Wi-Fi verification failed. Expected BSSID: ${meta.authWifi}, received: ${wifiBssid || 'None'}.`,
+          error: `Second-layer Wi-Fi verification failed: The reported Wi-Fi BSSID (${wifiBssid || 'None'}) does not match the authorized physical access point configured by the sender.`,
           retryAllowed: true
         });
       }
@@ -185,10 +195,20 @@ async function verifyAndAuthorize(req, res) {
       const reportedBle = (bleBeaconUuid || '').toLowerCase().trim();
       if (!reportedBle || reportedBle !== normalizedReqBle) {
         await logVerificationAttempt(doc.id, req.user?.id, 'BLE_BEACON', 'DENIED_BLE_MISMATCH');
+        await db.run(
+          "INSERT INTO audit_logs (user_id, action, document_id, details, ip_address) VALUES (?, ?, ?, ?, ?)",
+          [
+            req.user?.id || null,
+            'BLE_BEACON_MISMATCH',
+            doc.id,
+            `Second-layer In-Building BLE Beacon verification failed. Reported UUID: ${bleBeaconUuid || 'None'} (Mismatch with sender requirements).`,
+            req.ip || req.connection?.remoteAddress
+          ]
+        );
         return res.status(403).json({
           granted: false,
           reason: 'BLE_MISMATCH',
-          error: `Second-layer BLE Beacon verification failed. Expected UUID: ${meta.authBle}, received: ${bleBeaconUuid || 'None'}.`,
+          error: `Second-layer BLE Beacon verification failed: The reported in-building Beacon UUID (${bleBeaconUuid || 'None'}) does not match the authorized physical transmitter configured by the sender.`,
           retryAllowed: true
         });
       }

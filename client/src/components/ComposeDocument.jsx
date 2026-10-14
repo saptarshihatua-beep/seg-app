@@ -564,13 +564,24 @@ export default function ComposeDocument({ onDocumentCreated }) {
                 <span>Require Authorized Local Wi-Fi BSSID</span>
               </label>
               {requireWifi && (
-                <input
-                  type="text"
-                  value={wifiBssid}
-                  onChange={(e) => setWifiBssid(e.target.value)}
-                  placeholder="e.g., 00:14:22:01:23:45 (Campus AP)"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
-                />
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    value={wifiBssid}
+                    onChange={(e) => setWifiBssid(e.target.value)}
+                    placeholder="e.g., 50:91:e3:55:92:cb (Campus AP)"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setWifiBssid('50:91:e3:55:92:cb')}
+                      className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono underline"
+                    >
+                      Use Campus AP (50:91:e3:55:92:cb)
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -587,13 +598,24 @@ export default function ComposeDocument({ onDocumentCreated }) {
                 <span>Require In-Building BLE Beacon UUID</span>
               </label>
               {requireBle && (
-                <input
-                  type="text"
-                  value={bleUuid}
-                  onChange={(e) => setBleUuid(e.target.value)}
-                  placeholder="e.g., e2c56db5-dffb-48d2-b060-d0f5a71096e0"
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
-                />
+                <div className="space-y-1">
+                  <input
+                    type="text"
+                    value={bleUuid}
+                    onChange={(e) => setBleUuid(e.target.value)}
+                    placeholder="e.g., e2c56db5-dffb-48d2-b060-d0f5a71096e0"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBleUuid('e2c56db5-dffb-48d2-b060-d0f5a71096e0')}
+                      className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono underline"
+                    >
+                      Use In-Building Beacon (e2c56db5...)
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>

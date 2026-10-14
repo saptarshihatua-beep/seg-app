@@ -533,16 +533,16 @@ export const mockApi = {
     // Wi-Fi second factor check (if configured)
     if (doc.encryption_metadata?.authWifi) {
       if (!wifiBssid || wifiBssid.toLowerCase().trim() !== doc.encryption_metadata.authWifi.toLowerCase().trim()) {
-        logAuditEvent('WIFI_MISMATCH', `Wi-Fi BSSID mismatch: expected ${doc.encryption_metadata.authWifi}`, doc.original_filename);
-        throw new Error(`Second-layer Wi-Fi verification failed. Expected BSSID: ${doc.encryption_metadata.authWifi}`);
+        logAuditEvent('WIFI_MISMATCH', `Wi-Fi BSSID mismatch: reported ${wifiBssid || 'None'}`, doc.original_filename);
+        throw new Error(`Second-layer Wi-Fi verification failed: The detected Wi-Fi BSSID (${wifiBssid || 'None'}) does not match the sender's authorized network requirement.`);
       }
     }
 
     // BLE second factor check (if configured)
     if (doc.encryption_metadata?.authBle) {
       if (!bleBeaconUuid || bleBeaconUuid.toLowerCase().trim() !== doc.encryption_metadata.authBle.toLowerCase().trim()) {
-        logAuditEvent('BLE_MISMATCH', `BLE Beacon mismatch: expected ${doc.encryption_metadata.authBle}`, doc.original_filename);
-        throw new Error(`Second-layer BLE Beacon verification failed. Expected UUID: ${doc.encryption_metadata.authBle}`);
+        logAuditEvent('BLE_MISMATCH', `BLE Beacon mismatch: reported ${bleBeaconUuid || 'None'}`, doc.original_filename);
+        throw new Error(`Second-layer In-Building BLE Beacon verification failed: The detected BLE Beacon UUID (${bleBeaconUuid || 'None'}) does not match the authorized in-building transmitter.`);
       }
     }
 

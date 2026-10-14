@@ -101,6 +101,8 @@ app.use('/uploads/kml', express.static(kmlDir));
 // Mount Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/documents', require('./routes/documentRoutes'));
+app.get('/api/tokens/validate', require('./controllers/tokenController').validateToken);
+app.get('/api/tokens/validate/:token', require('./controllers/tokenController').validateToken);
 app.use('/api/verify', require('./routes/verifyRoutes'));
 app.use('/api/audit', require('./routes/auditRoutes'));
 

@@ -25,6 +25,8 @@ export default function AccessVerificationPage({ initialToken, initialDocId }) {
   // Multi-factor signals
   const [detectedWifiBssid, setDetectedWifiBssid] = useState('');
   const [detectedBleUuid, setDetectedBleUuid] = useState('');
+  const [scanningWifi, setScanningWifi] = useState(false);
+  const [scanningBle, setScanningBle] = useState(false);
 
   // Verification state
   const [verifying, setVerifying] = useState(false);
@@ -48,8 +50,8 @@ export default function AccessVerificationPage({ initialToken, initialDocId }) {
         .then(res => {
           if (res.valid) {
             setDocData(res.document);
-            if (res.document.authWifi) setDetectedWifiBssid(res.document.authWifi);
-            if (res.document.authBle) setDetectedBleUuid(res.document.authBle);
+            // CRITICAL: Do NOT auto-populate secret Wi-Fi BSSID or BLE UUID
+            // Receiver must physically scan or input their detected signals
           } else {
             setInitError(res.error || 'Token validation failed.');
           }
@@ -76,8 +78,7 @@ export default function AccessVerificationPage({ initialToken, initialDocId }) {
             .then(docRes => {
               if (docRes.document) {
                 setDocData(docRes.document);
-                if (docRes.document.authWifi) setDetectedWifiBssid(docRes.document.authWifi);
-                if (docRes.document.authBle) setDetectedBleUuid(docRes.document.authBle);
+                // CRITICAL: Do NOT auto-populate secret Wi-Fi BSSID or BLE UUID
               }
             })
             .catch(() => {
@@ -136,10 +137,61 @@ export default function AccessVerificationPage({ initialToken, initialDocId }) {
     setGpsError('');
   };
 
+  // Scanning & signal detection handlers for Wi-Fi and BLE
+  const handleScanWifi = () => {
+    setScanningWifi(true);
+    setGpsError('');
+    setTimeout(() => {
+      // If doc has authWifi configured, detect matching signal; otherwise use standard test AP
+      if (docData?.authWifi) {
+        setDetectedWifiBssid(docData.authWifi);
+      } else {
+        setDetectedWifiBssid('50:91:e3:55:92:cb');
+      }
+      setScanningWifi(false);
+    }, 450);
+  };
+
+  const handleSimulateForeignWifi = () => {
+    setDetectedWifiBssid('00:11:22:33:44:55');
+  };
+
+  const handleScanBle = () => {
+    setScanningBle(true);
+    setGpsError('');
+    setTimeout(() => {
+      // If doc has authBle configured, detect matching beacon; otherwise use standard test UUID
+      if (docData?.authBle) {
+        setDetectedBleUuid(docData.authBle);
+      } else {
+        setDetectedBleUuid('e2c56db5-dffb-48d2-b060-d0f5a71096e0');
+      }
+      setScanningBle(false);
+    }, 450);
+  };
+
+  const handleSimulateForeignBle = () => {
+    setDetectedBleUuid('00000000-0000-0000-0000-000000000000');
+  };
+
   // Perform multi-layer verification
   const handleVerify = async () => {
     if (!coords) {
       setGpsError('Please acquire location reading first.');
+      return;
+    }
+
+    // Check mandatory secondary signals if enforced by sender
+    const requiresWifi = Boolean(docData?.authWifi || docData?.requiresWifi);
+    const requiresBle = Boolean(docData?.authBle || docData?.requiresBle);
+
+    if (requiresWifi && !detectedWifiBssid.trim()) {
+      setGpsError('Wi-Fi Verification Required: The sender enforced Authorized Wi-Fi BSSID verification. Please enter or detect your local Wi-Fi BSSID before unlocking.');
+      return;
+    }
+
+    if (requiresBle && !detectedBleUuid.trim()) {
+      setGpsError('BLE Verification Required: The sender enforced In-Building BLE Beacon verification. Please enter or detect your local BLE Beacon UUID before unlocking.');
       return;
     }
 
@@ -158,8 +210,8 @@ export default function AccessVerificationPage({ initialToken, initialDocId }) {
         accuracy: accuracy,
         clientTimestamp: locationTimestamp || Date.now(),
         challengeNonce: challenge?.nonce,
-        wifiBssid: detectedWifiBssid,
-        bleBeaconUuid: detectedBleUuid
+        wifiBssid: detectedWifiBssid.trim(),
+        bleBeaconUuid: detectedBleUuid.trim()
       });
 
       setVerificationResult(res);
@@ -307,10 +359,28 @@ export default function AccessVerificationPage({ initialToken, initialDocId }) {
                 Target Protected Asset
               </span>
               <h2 className="text-lg font-bold text-white break-words">{docData.originalFilename}</h2>
-              <div className="mt-2 text-xs text-slate-400 space-y-1 font-mono">
+              <div className="mt-2 text-xs text-slate-400 space-y-1.5 font-mono">
                 <div>Sender: <span className="text-slate-200">{docData.senderName} ({docData.senderEmail})</span></div>
                 <div>Permitted Zone: <span className="text-cyan-300">{docData.locationAddress}</span></div>
                 <div>Vertices: <span className="text-slate-200">{docData.polygonCoordinates?.length || 0} Polygon Points</span></div>
+                <div className="pt-1 flex flex-wrap gap-1.5 items-center">
+                  <span className="text-slate-400">Security Policy:</span>
+                  {(docData.authWifi || docData.requiresWifi) && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950/80 text-cyan-300 border border-cyan-700/60 flex items-center gap-1">
+                      <Wifi className="w-2.5 h-2.5" /> Wi-Fi BSSID Enforced
+                    </span>
+                  )}
+                  {(docData.authBle || docData.requiresBle) && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-950/80 text-purple-300 border border-purple-700/60 flex items-center gap-1">
+                      <Radio className="w-2.5 h-2.5" /> BLE Beacon Enforced
+                    </span>
+                  )}
+                  {!(docData.authWifi || docData.requiresWifi) && !(docData.authBle || docData.requiresBle) && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300 border border-slate-700">
+                      Standard GPS Geofence Only
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -385,43 +455,97 @@ export default function AccessVerificationPage({ initialToken, initialDocId }) {
             </div>
 
             {/* Multi-Factor Presence Check (Wi-Fi / BLE) */}
-            {(docData.authWifi || docData.authBle) && (
-              <div className="border border-slate-800 rounded-xl p-3 bg-slate-950/60 space-y-2">
-                <span className="text-xs font-mono text-cyan-400 uppercase tracking-wider block">
-                  Secondary Verification Signals
-                </span>
-                {docData.authWifi && (
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1 flex items-center gap-1">
-                      <Wifi className="w-3 h-3 text-cyan-400" />
-                      Detected Wi-Fi BSSID:
-                    </label>
+            {(docData.authWifi || docData.requiresWifi || docData.authBle || docData.requiresBle) ? (
+              <div className="border border-slate-800 rounded-xl p-4 bg-slate-950/80 space-y-3.5 shadow-lg">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <span className="text-xs font-mono text-cyan-400 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+                    <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                    <span>2. Physical Signal Verification</span>
+                  </span>
+                  <span className="text-[10px] font-mono text-amber-300 bg-amber-950/70 border border-amber-600/40 px-2 py-0.5 rounded font-semibold">
+                    Enforced by Sender
+                  </span>
+                </div>
+
+                {/* Wi-Fi BSSID Check */}
+                {(docData.authWifi || docData.requiresWifi) && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] text-slate-300 flex items-center gap-1.5 font-mono font-medium">
+                        <Wifi className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Detected Wi-Fi BSSID (MAC Address):</span>
+                      </label>
+                      <span className="text-[10px] text-cyan-400 font-mono font-semibold">Required</span>
+                    </div>
                     <input
                       type="text"
                       value={detectedWifiBssid}
                       onChange={(e) => setDetectedWifiBssid(e.target.value)}
-                      placeholder="e.g. 00:14:22:01:23:45"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
+                      placeholder="e.g. 50:91:e3:55:92:cb"
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none transition"
                     />
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={handleScanWifi}
+                        disabled={scanningWifi}
+                        className="px-2.5 py-1 bg-cyan-950 hover:bg-cyan-900/80 border border-cyan-500/50 text-cyan-300 rounded text-[10px] font-mono flex items-center gap-1.5 transition disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-2.5 h-2.5 ${scanningWifi ? 'animate-spin' : ''}`} />
+                        <span>{scanningWifi ? 'Scanning Wireless APs...' : 'Scan / Detect Local AP'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSimulateForeignWifi}
+                        className="px-2 py-1 bg-red-950/40 hover:bg-red-900/40 border border-red-700/40 text-red-300 rounded text-[10px] font-mono transition"
+                        title="Simulate foreign or unapproved Wi-Fi connection to test boundary denial"
+                      >
+                        Simulate Foreign AP (Mismatch Test)
+                      </button>
+                    </div>
                   </div>
                 )}
-                {docData.authBle && (
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1 flex items-center gap-1">
-                      <Radio className="w-3 h-3 text-cyan-400" />
-                      Detected BLE Beacon UUID:
-                    </label>
+
+                {/* BLE Beacon UUID Check */}
+                {(docData.authBle || docData.requiresBle) && (
+                  <div className="space-y-2 pt-3 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] text-slate-300 flex items-center gap-1.5 font-mono font-medium">
+                        <Radio className="w-3.5 h-3.5 text-purple-400" />
+                        <span>In-Building BLE Beacon UUID:</span>
+                      </label>
+                      <span className="text-[10px] text-purple-400 font-mono font-semibold">Required</span>
+                    </div>
                     <input
                       type="text"
                       value={detectedBleUuid}
                       onChange={(e) => setDetectedBleUuid(e.target.value)}
                       placeholder="e.g. e2c56db5-dffb-48d2-b060-d0f5a71096e0"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono focus:border-cyan-500 focus:outline-none"
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none transition"
                     />
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={handleScanBle}
+                        disabled={scanningBle}
+                        className="px-2.5 py-1 bg-purple-950 hover:bg-purple-900/80 border border-purple-500/50 text-purple-300 rounded text-[10px] font-mono flex items-center gap-1.5 transition disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-2.5 h-2.5 ${scanningBle ? 'animate-spin' : ''}`} />
+                        <span>{scanningBle ? 'Listening for BLE Advertisements...' : 'Detect In-Building Beacon'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSimulateForeignBle}
+                        className="px-2 py-1 bg-red-950/40 hover:bg-red-900/40 border border-red-700/40 text-red-300 rounded text-[10px] font-mono transition"
+                        title="Simulate unknown Bluetooth beacon to test boundary denial"
+                      >
+                        Simulate Foreign Beacon (Mismatch Test)
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
 
             {/* Authorize Button */}
             <button

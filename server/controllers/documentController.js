@@ -341,6 +341,8 @@ async function getDocumentDetails(req, res) {
         createdAt: doc.created_at,
         authWifi: meta.authWifi,
         authBle: meta.authBle,
+        requiresWifi: Boolean(meta.authWifi),
+        requiresBle: Boolean(meta.authBle),
         keyDelivery: meta.keyDelivery
       }
     });

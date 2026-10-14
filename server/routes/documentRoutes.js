@@ -19,6 +19,7 @@ router.post('/:docId/token', authenticateToken, tokenController.generateNewToken
 
 // Validate token info (Public endpoint for recipient link opening)
 router.get('/token/validate', tokenController.validateToken);
+router.get('/token/validate/:token', tokenController.validateToken);
 
 // Get document details
 router.get('/:id', authenticateToken, documentController.getDocumentDetails);
