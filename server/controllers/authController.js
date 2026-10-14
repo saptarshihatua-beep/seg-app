@@ -169,9 +169,73 @@ async function listReceivers(req, res) {
   }
 }
 
+async function deleteReceiver(req, res) {
+  try {
+    const param = (req.params.id || '').trim();
+    if (!param) {
+      return res.status(400).json({ error: 'Target identifier is required.' });
+    }
+
+    let targetUser = null;
+    const numericId = parseInt(param, 10);
+    if (!isNaN(numericId) && String(numericId) === param) {
+      targetUser = await db.get("SELECT id, name, email FROM users WHERE id = ?", [numericId]);
+    } else {
+      targetUser = await db.get("SELECT id, name, email FROM users WHERE LOWER(email) = ?", [param.toLowerCase()]);
+    }
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Recipient account not found.' });
+    }
+
+    // Do not delete currently logged in user
+    if (req.user && req.user.id === targetUser.id) {
+      return res.status(400).json({ error: 'Cannot delete your own active session account.' });
+    }
+
+    const targetId = targetUser.id;
+
+    // Disconnect references in audit_logs
+    try {
+      await db.run("UPDATE audit_logs SET user_id = NULL WHERE user_id = ?", [targetId]);
+    } catch (e) {}
+
+    // Disconnect references in documents where user was receiver
+    try {
+      await db.run("UPDATE documents SET receiver_id = NULL WHERE receiver_id = ?", [targetId]);
+    } catch (e) {}
+
+    // Delete documents created by this user if any
+    try {
+      await db.run("DELETE FROM documents WHERE sender_id = ?", [targetId]);
+    } catch (e) {}
+
+    // Delete user from users table
+    await db.run("DELETE FROM users WHERE id = ?", [targetId]);
+
+    // Record audit event
+    try {
+      await db.run(
+        "INSERT INTO audit_logs (user_id, action, details, ip_address) VALUES (?, ?, ?, ?)",
+        [req.user?.id || null, 'RECIPIENT_DELETED', `Deleted stocked recipient ${targetUser.email} (ID: ${targetId})`, String(req.ip || req.connection?.remoteAddress || '').slice(0, 45)]
+      );
+    } catch (e) {}
+
+    res.json({
+      message: `Stocked recipient ${targetUser.email} deleted successfully.`,
+      deletedId: targetId,
+      deletedEmail: targetUser.email
+    });
+  } catch (err) {
+    console.error('[Delete Receiver Error]:', err);
+    res.status(500).json({ error: 'Failed to delete recipient: ' + err.message });
+  }
+}
+
 module.exports = {
   register,
   login,
   getMe,
-  listReceivers
+  listReceivers,
+  deleteReceiver
 };

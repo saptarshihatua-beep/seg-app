@@ -262,6 +262,14 @@ export const mockApi = {
     return { receivers };
   },
 
+  async deleteReceiver(idOrEmail) {
+    initStorage();
+    let users = JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS) || '[]');
+    users = users.filter(u => u.id !== Number(idOrEmail) && u.email.toLowerCase() !== String(idOrEmail).toLowerCase());
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+    return { message: 'Stocked recipient deleted successfully.' };
+  },
+
   async createDocument(formData) {
     initStorage();
     let receiverEmail, locationAddress, polygonCoordinates, originalFilename, clientEncryptedPayload, keyDeliveryMode, authorizedWifiBssid, authorizedBleUuid;

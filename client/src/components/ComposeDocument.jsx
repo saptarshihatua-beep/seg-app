@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Lock, MapPin, Send, Upload, Key, FileText, Globe, Layers, 
   Download, Eye, EyeOff, ShieldCheck, Wifi, Radio, Sparkles, RefreshCw, CheckCircle,
-  Undo2, Trash2
+  Undo2, Trash2, X
 } from 'lucide-react';
 import InteractiveMap from './InteractiveMap';
 import { encryptDocumentClientSide } from '../utils/cryptoClient';
@@ -50,8 +50,40 @@ export default function ComposeDocument({ onDocumentCreated }) {
   const [error, setError] = useState('');
   const [previewEncrypted, setPreviewEncrypted] = useState(null);
 
-  // Receivers list dropdown
+  // Receivers list dropdown and management state
   const [registeredReceivers, setRegisteredReceivers] = useState([]);
+  const [showManageRecipients, setShowManageRecipients] = useState(false);
+  const [recipientSearch, setRecipientSearch] = useState('');
+  const [deletingId, setDeletingId] = useState(null);
+  const [deleteStatusMessage, setDeleteStatusMessage] = useState('');
+
+  const handleDeleteRecipient = async (recipientId, recipientEmail, e) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete stocked recipient "${recipientEmail}"?`)) {
+      return;
+    }
+    try {
+      setDeletingId(recipientId);
+      await api.deleteReceiver(recipientId);
+      setRegisteredReceivers(prev => prev.filter(r => r.id !== recipientId && r.email !== recipientEmail));
+      if (receiverEmail === recipientEmail) {
+        setReceiverEmail('');
+      }
+      setDeleteStatusMessage(`Recipient ${recipientEmail} removed successfully.`);
+      setTimeout(() => setDeleteStatusMessage(''), 4000);
+    } catch (err) {
+      console.error('Failed to delete recipient:', err);
+      setError(`Failed to delete recipient: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const filteredReceivers = registeredReceivers.filter(r => {
+    if (!recipientSearch) return true;
+    const q = recipientSearch.toLowerCase();
+    return (r.name && r.name.toLowerCase().includes(q)) || (r.email && r.email.toLowerCase().includes(q));
+  });
 
   useEffect(() => {
     api.listReceivers()
@@ -216,8 +248,17 @@ export default function ComposeDocument({ onDocumentCreated }) {
           <div>
             <label className="block text-xs font-mono text-cyan-400 uppercase tracking-wider mb-2 flex items-center justify-between">
               <span>1. Fill In Receiver's Email</span>
-              <span className="text-[10px] text-slate-500">Authorized Recipient</span>
+              <button
+                type="button"
+                onClick={() => setShowManageRecipients(!showManageRecipients)}
+                className="text-[10px] text-cyan-400 hover:text-cyan-300 font-mono flex items-center gap-1.5 transition px-2 py-0.5 rounded-lg bg-cyan-950/70 border border-cyan-700/60"
+                title="Open section to clean up and delete unnecessary stocked emails"
+              >
+                <Trash2 className="w-3 h-3 text-red-400" />
+                <span>{showManageRecipients ? 'Close Management' : 'Manage & Delete Stocked Emails'}</span>
+              </button>
             </label>
+
             <div className="relative">
               <input
                 type="email"
@@ -228,20 +269,150 @@ export default function ComposeDocument({ onDocumentCreated }) {
                 className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 font-mono"
               />
             </div>
-            {/* Quick Receivers Chips */}
+
+            {deleteStatusMessage && (
+              <div className="mt-2 p-2 bg-emerald-950/60 border border-emerald-500/50 rounded-lg text-[11px] font-mono text-emerald-300 flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{deleteStatusMessage}</span>
+              </div>
+            )}
+
+            {/* Quick Receivers Chips with Instant Delete '×' Button */}
             {registeredReceivers.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                <span className="text-[11px] text-slate-400 self-center">Registered:</span>
-                {registeredReceivers.map(r => (
+              <div className="mt-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Stocked Recipients ({registeredReceivers.length}):
+                  </span>
                   <button
                     type="button"
-                    key={r.id}
-                    onClick={() => setReceiverEmail(r.email)}
-                    className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300 hover:text-cyan-300 hover:bg-slate-700 transition"
+                    onClick={() => setShowManageRecipients(!showManageRecipients)}
+                    className="text-[10px] text-red-400 hover:text-red-300 font-mono flex items-center gap-1"
                   >
-                    {r.name.split(' ')[0]} ({r.email})
+                    <Trash2 className="w-2.5 h-2.5" />
+                    <span>Delete Section</span>
                   </button>
-                ))}
+                </div>
+                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
+                  {registeredReceivers.map(r => (
+                    <div
+                      key={r.id}
+                      className={`inline-flex items-center rounded-lg border text-[11px] font-mono transition ${
+                        receiverEmail === r.email
+                          ? 'bg-cyan-950/90 border-cyan-500 text-cyan-300 font-semibold shadow-sm'
+                          : 'bg-slate-800/90 border-slate-700/80 text-slate-300 hover:border-slate-600'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setReceiverEmail(r.email)}
+                        className="px-2 py-0.5 hover:text-cyan-300 transition text-left"
+                        title={`Select ${r.email}`}
+                      >
+                        {r.name?.split(' ')[0] || 'User'} ({r.email})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteRecipient(r.id, r.email, e)}
+                        disabled={deletingId === r.id}
+                        className="px-1.5 py-0.5 text-slate-400 hover:text-red-400 hover:bg-red-950/60 rounded-r-lg transition border-l border-slate-700/80"
+                        title={`Delete unnecessary stocked email ${r.email}`}
+                      >
+                        {deletingId === r.id ? (
+                          <RefreshCw className="w-2.5 h-2.5 animate-spin text-red-400" />
+                        ) : (
+                          <X className="w-2.5 h-2.5" />
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Dedicated Delete / Clean Management Section */}
+            {showManageRecipients && (
+              <div className="mt-3 p-3.5 bg-slate-950/95 border border-red-900/50 rounded-xl space-y-3 shadow-xl">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2 text-xs font-mono text-red-400 font-semibold">
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                    <span>Delete Unnecessary Stocked Emails</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowManageRecipients(false)}
+                    className="p-1 rounded text-slate-500 hover:text-white hover:bg-slate-800"
+                    title="Close delete section"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <p className="text-[11px] font-mono text-slate-400">
+                  Remove obsolete test accounts and unnecessary recipient emails from the application database.
+                </p>
+
+                {/* Filter / Search Bar */}
+                {registeredReceivers.length > 3 && (
+                  <input
+                    type="text"
+                    value={recipientSearch}
+                    onChange={(e) => setRecipientSearch(e.target.value)}
+                    placeholder="Search stocked email to delete..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:border-red-500 focus:outline-none"
+                  />
+                )}
+
+                {/* List of Stocked Emails with Direct Delete Action */}
+                <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+                  {filteredReceivers.length === 0 ? (
+                    <p className="text-[11px] font-mono text-slate-500 py-3 text-center">
+                      No stocked recipients found.
+                    </p>
+                  ) : (
+                    filteredReceivers.map(r => (
+                      <div
+                        key={r.id}
+                        className="flex items-center justify-between p-2 rounded-lg bg-slate-900/90 border border-slate-800/80 text-xs font-mono hover:border-slate-700 transition"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <span className="text-white font-medium truncate block">
+                            {r.name || 'User'}
+                          </span>
+                          <span className="text-[11px] text-cyan-400 truncate block">
+                            {r.email}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReceiverEmail(r.email);
+                              setShowManageRecipients(false);
+                            }}
+                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] transition"
+                          >
+                            Use
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteRecipient(r.id, r.email, e)}
+                            disabled={deletingId === r.id}
+                            className="px-2 py-1 rounded bg-red-950 hover:bg-red-900 border border-red-700 text-red-300 text-[10px] font-bold flex items-center gap-1 transition"
+                            title={`Delete ${r.email}`}
+                          >
+                            {deletingId === r.id ? (
+                              <RefreshCw className="w-3 h-3 animate-spin text-red-400" />
+                            ) : (
+                              <Trash2 className="w-3 h-3 text-red-400" />
+                            )}
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
           </div>

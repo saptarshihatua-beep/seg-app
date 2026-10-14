@@ -64,6 +64,34 @@ function getJson(baseUrl, path, token) {
   });
 }
 
+function deleteJson(baseUrl, path, token) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(baseUrl + path);
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'DELETE',
+      headers: {
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      }
+    };
+    const req = http.request(options, (res) => {
+      let responseBody = '';
+      res.on('data', chunk => responseBody += chunk);
+      res.on('end', () => {
+        try {
+          resolve({ status: res.statusCode, data: JSON.parse(responseBody) });
+        } catch {
+          resolve({ status: res.statusCode, text: responseBody });
+        }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 // Client-side AES decryption helper matching cryptoClient.js
 function decryptClientSide(payload, passphrase) {
   const parsedObj = typeof payload === 'string' ? JSON.parse(payload) : payload;
@@ -292,8 +320,33 @@ async function runComprehensiveTests() {
     assert.strictEqual(reRegisterRes.status, 200, 'Re-registering with existing email must succeed and re-authenticate user');
     console.log('  ✓ 30+ rapid sign-ins and re-registrations with the same email completed with no throttling.');
 
+    // 14. Delete unnecessary stocked recipient endpoint verification
+    console.log('\n[Test 14] Deleting unnecessary stocked recipient email...');
+    // Create temporary recipient
+    const tempReg = await postJson(baseUrl, '/api/auth/register', {
+      name: 'Obsolete Test User',
+      email: 'temp.obsolete@uccs.edu',
+      password: 'TempPassword123!',
+      role: 'receiver'
+    });
+    assert(tempReg.status === 200 || tempReg.status === 201, 'Registration should return 200 or 201');
+    const tempUserId = tempReg.data.user.id;
+
+    // Verify temp recipient is in listReceivers
+    const listBefore = await getJson(baseUrl, '/api/auth/receivers', senderToken);
+    assert(listBefore.data.receivers.some(r => r.email === 'temp.obsolete@uccs.edu'), 'Temp user must be listed');
+
+    // Delete temp recipient
+    const delRes = await deleteJson(baseUrl, `/api/auth/receivers/${tempUserId}`, senderToken);
+    assert.strictEqual(delRes.status, 200, 'Deleting stocked recipient should return HTTP 200');
+
+    // Verify temp recipient is no longer in listReceivers
+    const listAfter = await getJson(baseUrl, '/api/auth/receivers', senderToken);
+    assert(!listAfter.data.receivers.some(r => r.email === 'temp.obsolete@uccs.edu'), 'Deleted user must no longer appear in stocked recipients');
+    console.log('  ✓ Stocked recipient successfully deleted and removed from database.');
+
     console.log('\n================================================================');
-    console.log('   ALL 13 END-TO-END DOCUMENT DELIVERY VERIFICATION CHECKS PASSED');
+    console.log('   ALL 14 END-TO-END DOCUMENT DELIVERY VERIFICATION CHECKS PASSED');
     console.log('================================================================\n');
 
   } finally {

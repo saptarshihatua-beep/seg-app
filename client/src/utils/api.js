@@ -64,6 +64,13 @@ export const api = {
     });
   },
 
+  async deleteReceiver(idOrEmail) {
+    return fetchJson(`${API_BASE}/auth/receivers/${encodeURIComponent(idOrEmail)}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeader() }
+    });
+  },
+
   // Documents
   async createDocument(formData) {
     return fetchJson(`${API_BASE}/documents`, {
